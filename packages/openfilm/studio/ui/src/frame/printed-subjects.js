@@ -49,7 +49,10 @@ export function crossingPeople(matte, track, quad, { w, h, longest = 4, pad = 0.
   matte.frames.forEach((f, i) => {
     const t = matte.times?.[i]; if (!Number.isFinite(t) || !f) return;
     const H = transformAt(track, t), q = quad.map((p) => apply(H, p)), bottom = Math.max(...q.map((p) => p[1])), top = Math.min(...q.map((p) => p[1]));
-    const across = (f.subjects ?? []).filter((s) => { const b = s.box, c4 = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]; const printed = c4.every((c) => inside(c, q)) && b[3] < bottom - 0.08 * (bottom - top); return !printed && overlaps(b, q); });
+    const across = (f.subjects ?? []).filter((s) => { const b = s.box, c4 = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]; const printed = c4.every((c) => inside(c, q)) && b[3] < bottom - 0.08 * (bottom - top); /* a person who can pass in front of the text stands about as tall as it or taller; specks (a reflection, a
+         picture's figure, a far passer-by) are not people crossing it */
+      const tall = b[3] - b[1] >= Math.max(0.08 * h, 0.35 * (bottom - top));
+      return !printed && tall && overlaps(b, q); });
     if (!across.length) return;
     if (start < 0) { start = t; boxes = across.slice(0, 4).map((s) => [s.box[0] / w, s.box[1] / h, s.box[2] / w, s.box[3] / h]); }
     if (t - start <= longest) end = t;

@@ -135,8 +135,10 @@ export function placeSaved<T extends { index: number; clips: readonly string[] }
     });
     if (best >= 0) { out.set(entry, best); taken.add(best); } else late.push(entry);
   }
+  /* by place: a track named while empty, or one left empty; never a track now full of other clips (an undo that took
+     a named track away must not hand its name to the track that moved into its place) */
   for (const entry of late) {
-    if (entry.index < tracks.length && !taken.has(entry.index)) { out.set(entry, entry.index); taken.add(entry.index); }
+    if (entry.index < tracks.length && !taken.has(entry.index) && (!entry.clips.length || !tracks[entry.index].clips.length)) { out.set(entry, entry.index); taken.add(entry.index); }
   }
   return out;
 }
@@ -144,7 +146,8 @@ export function placeSaved<T extends { index: number; clips: readonly string[] }
 /**
  * The names kept for tracks, by film.html track index now. A track is found by the clips it had when named (tracks
  * move, and open and close above it, so its place changes; film.html gives a track no id of its own), the one holding
- * the most of them; a track named while empty, or whose clips are all gone, by its place, when no other name took it.
+ * the most of them; a track named while empty, or an empty one whose clips are all gone, by its place, when no other
+ * name took it.
  */
 export function trackNamesOf(saved: readonly SavedTrackName[], tracks: ClipsOf): Map<number, string> {
   return new Map([...placeSaved(saved, tracks)].map(([entry, i]) => [i, entry.name]));

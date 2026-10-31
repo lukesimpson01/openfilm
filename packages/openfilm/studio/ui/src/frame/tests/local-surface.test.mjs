@@ -64,3 +64,43 @@ test('a patch lost while leaving the picture keeps leaving at its own speed, not
   assert.ok(x(7) > 150, `patch near the edge at frame 7 (${x(7).toFixed(1)})`);
   assert.ok(x(11) - x(8) > 20, `keeps moving out at its own speed (${(x(11) - x(8)).toFixed(1)} px over 3 frames)`);
 });
+
+test('a close call is asked about: another kind of orientation that scored nearly as well is offered, a clear loser is not', async () => {
+  const { surfaceChoices } = await import('../local-surface.js');
+  const ray = unit([0.3, 0.4, 1]), wall = unit([0.8, 0, 0.6]);
+  const close = surfaceChoices(wall, [{ normal: [0, 1, 0], margin: 8 }], ray);
+  assert.deepEqual(close, [[0, 1, 0]], 'the floor scored close to the wall');
+  assert.deepEqual(surfaceChoices(wall, [{ normal: [0, 1, 0], margin: 60 }], ray), [], 'a clear winner is not questioned');
+  assert.deepEqual(surfaceChoices(wall, [{ normal: unit([0.78, 0, 0.62]), margin: 1 }], ray), [], 'the found one is not offered again');
+  assert.deepEqual(surfaceChoices(wall, [{ normal: [0, -1, 0], margin: 1 }], ray), [], 'a ceiling the click looks away from is impossible');
+  /* nothing trusted below the horizon: the floor is offered */
+  assert.ok(surfaceChoices(null, [], ray).some((n) => n[1] === 1));
+  const high = surfaceChoices(null, [], unit([0.3, -0.4, 1]));
+  assert.ok(!high.some((n) => Math.abs(n[1]) > 0.9), 'above the horizon there is no floor to offer');
+  /* a click off to one side: the wall along the camera's way on that side is offered (a corridor, a street) */
+  assert.ok(high.some((n) => n[0] > 0.9), JSON.stringify(high));
+  assert.ok(surfaceChoices(null, [], unit([-0.4, 0, 1])).some((n) => n[0] < -0.9), 'left side: a left-hand wall');
+  assert.deepEqual(surfaceChoices(null, [], unit([0, -0.3, 1])), [], 'straight ahead and high: nothing usual to offer');
+});
+
+test('an orientation the person picks is used as given: the patch is tracked on it, nothing is estimated', () => {
+  const n = unit([0.5, 0, 0.87]), { grays, times } = scene(n, 2.6), floor = [0, 1, 0];
+  const r = localSurface(grays, times, W, H, 0, [W / 2, H / 2 + 60], { normal: floor });
+  assert.equal(r.chosen, true); assert.equal(r.tilted, true); assert.deepEqual(r.normal, floor);
+  assert.equal(r.result.frames.length, grays.length);
+  assert.deepEqual(r.alternatives, []);
+});
+
+test('a patch that has left the picture stays gone: a look-alike found later does not bring the text back', async () => {
+  const { trackPatch } = await import('../local-surface.js');
+  /* slides right 12 px a frame, lost near the edge; from frame 16 the same texture shows again where it started */
+  const W2 = 180, H2 = 320, n = 24, base = scene([0, 0, 1], 3).grays[0];
+  const shift = (g, dx) => { const o = new Uint8Array(g.length).fill(120); for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { const sx = x - dx; if (sx >= 0 && sx < W2) o[y * W2 + x] = g[y * W2 + sx]; } return o; };
+  const grays = Array.from({ length: n }, (_, i) => (i < 7 ? shift(base, 12 * i) : i < 16 ? new Uint8Array(W2 * H2).fill(120) : base)), times = grays.map((_, i) => i * 0.1);
+  const quad = [[60, 120], [120, 120], [120, 200], [60, 200]], r = trackPatch(grays, times, W2, H2, 0, quad, null);
+  const x = (i) => { const H = r.frames[i].H, c = [90, 160], z = H[6] * c[0] + H[7] * c[1] + H[8]; return (H[0] * c[0] + H[1] * c[1] + H[2]) / z; };
+  for (let i = 16; i < n; i++) assert.ok(x(i) > W2, `frame ${i}: still out of the picture (${x(i).toFixed(0)})`);
+  /* and it left the way it was going, without folding: its four corners keep their order */
+  const H = r.frames[n - 1].H, q = quad.map((p) => { const z = H[6] * p[0] + H[7] * p[1] + H[8]; return [(H[0] * p[0] + H[1] * p[1] + H[2]) / z, (H[3] * p[0] + H[4] * p[1] + H[5]) / z]; });
+  assert.ok(q[1][0] > q[0][0] && q[2][1] > q[1][1], JSON.stringify(q));
+});

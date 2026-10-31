@@ -106,3 +106,11 @@ test('a track\'s name follows its clips when tracks move, and its place when it 
   saved = namedTrack(saved, tracks, 2, '  ');
   assert.equal(trackNamesOf(saved, tracks).has(2), false);
 });
+
+test('a named track taken away (undo) leaves no name on the track that moves into its place', () => {
+  const saved = [{ name: '3D', index: 2, clips: ['trk'] }];
+  const after = [{ clips: [{ id: 'cam' }] }, { clips: [{ id: 'title' }] }, { clips: [{ id: 'video' }] }];
+  assert.equal(trackNamesOf(saved, after).has(2), false);
+  /* left empty instead, it keeps its name where it was */
+  assert.equal(trackNamesOf(saved, [{ clips: [] }, { clips: [] }, { clips: [] }]).get(2), '3D');
+});

@@ -82,7 +82,7 @@ export function surfaceNormal(homographies, K, ray, others = null) {
   if (!sets.length) return null;
   /* every frame votes for the orientations it can explain; the one most frames agree on wins, so a few blurred or
      weakly tracked frames cannot drag it away */
-  let best = null;
+  let best = null; const scored = [];
   for (const seed of sets.flat()) {
     const members = sets.map((c) => c.reduce((m, n) => (!m || angle(n, seed) < angle(m, seed) ? n : m), null)).filter((n) => angle(n, seed) < 16);
     if (members.length < Math.max(1, Math.ceil(sets.length / 2))) continue;
@@ -92,13 +92,16 @@ export function surfaceNormal(homographies, K, ray, others = null) {
     const upright = Math.min(Math.abs(m[1]), 1 - Math.abs(m[1])), turn = members.reduce((s2, n) => s2 + n.rot, 0) / members.length;
     const agree = members.reduce((s2, n) => s2 + (n.agree ?? 0), 0) / members.length;
     const score = -25 * members.length + spread + 80 * upright + 2 * turn + 1.5 * agree;
-    if (!best || score < best.score) best = { n: m, spread, score, count: members.length, of: sets.length };
+    const one = { n: m, spread, score, count: members.length, of: sets.length }; scored.push(one);
+    if (!best || score < best.score) best = one;
   }
   if (!best) return null;
   /* walls stand upright and floors lie flat: a normal within 25° of either snaps to it (the rest is measurement noise) */
-  let n = best.n;
-  if (Math.abs(n[1]) < 0.42) n = norm([n[0], 0, n[2]]); else if (Math.abs(n[1]) > 0.9) n = [0, Math.sign(n[1]), 0];
-  return { normal: n, spread: best.spread, frames: best.count, of: best.of };
+  const snap = (v) => (Math.abs(v[1]) < 0.42 ? norm([v[0], 0, v[2]]) : Math.abs(v[1]) > 0.9 ? [0, Math.sign(v[1]), 0] : v);
+  const n = snap(best.n);
+  /* the best orientation of another kind (the mirror, or floor for wall): when it scores close, the click is ambiguous */
+  const other = scored.filter((o) => angle(snap(o.n), n) > 30).reduce((b, o) => (!b || o.score < b.score ? o : b), null);
+  return { normal: n, spread: best.spread, frames: best.count, of: best.of, alt: other ? { normal: snap(other.n), margin: other.score - best.score } : null };
 }
 
 /** a rectangle on the surface around the click, as the camera sees it: 4 pixel corners (TL TR BR BL) */
@@ -134,13 +137,20 @@ export function trackPatch(grays, times, w, h, k, quad, global = null) {
      much faster than the distant street the camera track follows); one lost anywhere else continues with the camera */
   const cx = quad.reduce((s2, p) => s2 + p[0], 0) / 4, cy = quad.reduce((s2, p) => s2 + p[1], 0) / 4;
   const leaving = (A, B) => { const a = apply(A, [cx, cy]), b = apply(B, [cx, cy]), m = 0.14; const nearX = b[0] < w * m ? -1 : b[0] > w * (1 - m) ? 1 : 0, nearY = b[1] < h * m ? -1 : b[1] > h * (1 - m) ? 1 : 0; return (nearX && Math.sign(b[0] - a[0]) === nearX) || (nearY && Math.sign(b[1] - a[1]) === nearY); };
+  /* one more frame of a leaving patch: its last step's move and growth (a similarity at its centre), never the step's
+     perspective compounded frame on frame, which folds the quad to a sliver within a few frames */
+  const size = (H) => { const q = quad.map((p) => apply(H, p)); return Math.hypot(q[2][0] - q[0][0], q[2][1] - q[0][1]) + Math.hypot(q[3][0] - q[1][0], q[3][1] - q[1][1]); };
+  const slide = (step, base, prev, last) => {
+    const c = apply(base, [cx, cy]), n = apply(step, c), k = Math.min(1.15, Math.max(0.87, size(last) / Math.max(1e-6, size(prev))));
+    return mul3([k, 0, n[0] - k * c[0], 0, k, n[1] - k * c[1], 0, 0, 1], base);
+  };
   const extend = (order) => {
     let lastGood = null, prevGood = null, lastG = null, run = null;
     for (const i of order) {
       const f = frames[i];
       if (!f.lost && !f.assumed) { prevGood = lastGood; lastGood = f.H; lastG = global?.frames?.[i]?.H ?? null; run = null; continue; }
       if (!f.lost) continue;
-      if (lastGood && prevGood && (run || leaving(prevGood, lastGood))) { const Pi = inv3(prevGood); if (Pi) { run = run ? mul3(mul3(lastGood, Pi), run) : mul3(mul3(lastGood, Pi), lastGood); f.H = run; f.lost = false; f.assumed = true; continue; } }
+      if (lastGood && prevGood && (run || leaving(prevGood, lastGood))) { const Pi = inv3(prevGood); if (Pi) { run = slide(mul3(lastGood, Pi), run ?? lastGood, prevGood, lastGood); f.H = run; f.lost = false; f.assumed = true; continue; } }
       const G = global?.frames?.[i]?.H;
       if (lastGood && lastG && G && inv3(lastG)) { f.H = mul3(G, mul3(inv3(lastG), lastGood)); f.lost = false; f.assumed = true; }
     }
@@ -152,6 +162,18 @@ export function trackPatch(grays, times, w, h, k, quad, global = null) {
   }
   extend(Array.from({ length: frames.length - k }, (_, j) => k + j));
   extend(Array.from({ length: k + 1 }, (_, j) => k - j));
+  /* once it is out of the picture it has gone for good: it keeps sliding away at its last move, and whatever look-alike
+     the tracker finds later (the same white wall further on) does not bring it back */
+  for (const order of [Array.from({ length: frames.length - k - 1 }, (_, j) => k + 1 + j), Array.from({ length: k }, (_, j) => k - 1 - j)]) {
+    let p = k, e = -1, D = null;
+    for (const i of order) {
+      const f = frames[i];
+      if (e < 0) { if (f.H && shown(f.H) < 0.02) { e = i; const Pi = inv3(frames[p].H); D = Pi ? mul3(f.H, Pi) : null; f.left = true; } else p = i; continue; }
+      if (!D) { f.lost = true; f.left = true; continue; }
+      const last = frames[i > e ? i - 1 : i + 1];
+      f.H = slide(D, last.H, frames[p].H, frames[e].H); f.lost = false; f.assumed = true; f.left = true;
+    }
+  }
   const lost = frames.filter((f) => f.lost).length / Math.max(1, frames.length), good = frames.filter((f) => Number.isFinite(f.err) && !f.assumed);
   const errs = good.map((f) => f.err).sort((a, b) => a - b), med = errs[errs.length >> 1] ?? Infinity;
   const quality = lost > 0.1 || med > 2.5 ? 'Poor' : med > 1.2 ? 'Fair' : 'Good';
@@ -162,30 +184,59 @@ export function trackPatch(grays, times, w, h, k, quad, global = null) {
  * Everything for a click on the footage: the tracked patch, the surface orientation and the quad to put text in.
  * click: pixel in the tracker's space at frame index k. Returns { quad, result, normal | null, quality, tilted }.
  */
-export function localSurface(grays, times, w, h, k, click, { global = null, focal } = {}) {
+export function localSurface(grays, times, w, h, k, click, { global = null, focal, normal: chosen = null } = {}) {
   const K = intrinsics(w, h, focal), ray = norm([(click[0] - K[2]) / K[0], (click[1] - K[5]) / K[0], 1]);
+  /* an orientation the person picked (the answer to "which way does it face?"): no estimate, just the patch on it */
+  if (chosen) { const quad = orientedQuad(click, chosen, K, { width: 0.4 }), result = trackPatch(grays, times, w, h, k, quad, global); return { quad, result, normal: chosen, spread: 0, quality: result.quality, tilted: true, chosen: true, alternatives: [] }; }
   const box = (c, r) => [[c[0] - r, c[1] - r * 1.3], [c[0] + r, c[1] - r * 1.3], [c[0] + r, c[1] + r * 1.3], [c[0] - r, c[1] + r * 1.3]].map(([x, y]) => [Math.min(w - 2, Math.max(1, x)), Math.min(h - 2, Math.max(1, y))]);
   /* three looks at different widths: a small patch is precise but blank walls give it little to hold, a wide one holds
      on but can mix a wall with the door beside it. Orientations the looks agree on are trusted. */
   const t0 = times[k], looks = [];
+  /* the looks only measure the frames within 1.4 s of the click (that is all the orientation uses): tracking just those
+     keeps a click quick on a long clip; the chosen patch is then tracked over the whole clip once */
+  let lo = k, hi = k; while (lo > 0 && t0 - times[lo - 1] <= 1.4) lo--; while (hi < times.length - 1 && times[hi + 1] - t0 <= 1.4) hi++;
+  const sg = grays.slice(lo, hi + 1), st = times.slice(lo, hi + 1), sk = k - lo;
+  const sglobal = global?.frames?.length === grays.length ? { ...global, frames: global.frames.slice(lo, hi + 1) } : null;
   const agree = () => { const valid = looks.filter((l) => l.est); let best = null; for (const l of valid) { const group = valid.filter((o) => angle(o.est.normal, l.est.normal) < 25); if (group.length >= 2 && (!best || group.length > best.length)) best = group; } return best; };
   let agreed = null;
   for (const f of [0.24, 0.16, 0.34]) {
-    const patch = trackPatch(grays, times, w, h, k, box(click, f * w), global), picks = [];
+    const patch = trackPatch(sg, st, w, h, sk, box(click, f * w), sglobal), picks = [];
     for (const dt of [0.2, 0.35, 0.5, 0.7, 0.9, 1.1]) {
-      let best = -1, gap = Infinity; patch.frames.forEach((fr, i) => { if (fr.lost || fr.assumed || i === k || !(fr.inliers >= 10)) return; const g = Math.abs(Math.abs(times[i] - t0) - dt); if (g < gap && g < 0.25) { gap = g; best = i; } });
+      let best = -1, gap = Infinity; patch.frames.forEach((fr, i) => { if (fr.lost || fr.assumed || i === sk || !(fr.inliers >= 10)) return; const g = Math.abs(Math.abs(st[i] - t0) - dt); if (g < gap && g < 0.25) { gap = g; best = i; } });
       if (best >= 0) picks.push(best);
     }
-    const used = [...new Set(picks)], Gk = global?.frames?.length === grays.length ? inv3(global.frames[k].H) : null;
-    const est = surfaceNormal(used.map((i) => patch.frames[i].H), K, ray, Gk ? used.map((i) => mul3(global.frames[i].H, Gk)) : null);
+    const used = [...new Set(picks)], Gk = sglobal ? inv3(sglobal.frames[sk].H) : null;
+    const est = surfaceNormal(used.map((i) => patch.frames[i].H), K, ray, Gk ? used.map((i) => mul3(sglobal.frames[i].H, Gk)) : null);
     const upright = est && (Math.abs(est.normal[1]) < 0.05 || Math.abs(est.normal[1]) > 0.95);
-    looks.push({ patch, est: est && est.spread < 18 && est.frames >= Math.max(2, Math.ceil(est.of * 0.5)) && upright ? est : null, assumed: patch.frames.filter((fr) => fr.assumed).length });
+    looks.push({ patch, f, raw: est && est.spread < 30 ? est : null, est: est && est.spread < 18 && est.frames >= Math.max(2, Math.ceil(est.of * 0.5)) && upright ? est : null, assumed: patch.frames.filter((fr) => fr.assumed).length });
     agreed = agree(); if (agreed) break; /* two looks agree: no need for the third */
   }
-  const probe = looks.reduce((b, l) => (l.assumed < b.assumed ? l : b), looks[0]).patch;
-  if (!agreed) return { quad: probe.plane, result: probe, normal: null, spread: null, quality: probe.quality, tilted: false };
-  const normal = norm(agreed.reduce((s2, l) => add3(s2, l.est.normal), [0, 0, 0])), quad = orientedQuad(click, normal, K, { width: 0.4 });
-  const result = trackPatch(grays, times, w, h, k, quad, global);
-  return { quad, result, normal, spread: Math.max(...agreed.map((l) => angle(l.est.normal, normal))), quality: result.quality, tilted: true };
+  const steady = looks.reduce((b, l) => (l.assumed < b.assumed ? l : b), looks[0]);
+  const normal = agreed ? norm(agreed.reduce((s2, l) => add3(s2, l.est.normal), [0, 0, 0])) : null;
+  const alternatives = surfaceChoices(normal, agreed ? agreed.map((l) => l.est.alt).filter(Boolean) : looks.map((l) => l.raw).filter(Boolean), ray);
+  if (!agreed) { const probe = trackPatch(grays, times, w, h, k, box(click, steady.f * w), global); return { quad: probe.plane, result: probe, normal: null, spread: null, quality: probe.quality, tilted: false, alternatives }; }
+  const quad = orientedQuad(click, normal, K, { width: 0.4 }), result = trackPatch(grays, times, w, h, k, quad, global);
+  return { quad, result, normal, spread: Math.max(...agreed.map((l) => angle(l.est.normal, normal))), quality: result.quality, tilted: true, alternatives };
+}
+
+/** close calls worth asking about: another orientation that scored nearly as well (agreed), or what the looks saw when
+ * they did not agree (not agreed); upright walls and flat floors only, one of each kind, never the found one again */
+const ASK_MARGIN = 22;
+export function surfaceChoices(found, seen, ray) {
+  const out = [];
+  for (const c of seen) {
+    const n = c.normal ?? c, margin = c.margin ?? 0;
+    if (found && margin > ASK_MARGIN) continue;
+    const upright = Math.abs(n[1]) < 0.05 || Math.abs(n[1]) > 0.95;
+    if (!upright || dot(n, ray) < 0.08 || (found && angle(n, found) < 30) || out.some((o) => angle(o, n) < 30)) continue;
+    out.push(n);
+  }
+  /* once it is a question at all, the commonest surfaces are fair answers even when the looks missed them: a wall running
+     along the camera's way on the click's side (a corridor's side, a street's facades) and, below the horizon, the floor */
+  if (!found || out.length) {
+    const side = Math.abs(ray[0]) > 0.12 ? norm([Math.sign(ray[0]), 0, 0.2]) : null;
+    for (const n of [side, ray[1] > 0.1 ? [0, 1, 0] : null]) if (n && !(found && angle(n, found) < 30) && !out.some((o) => angle(o, n) < 30)) out.push(n);
+  }
+  return out.slice(0, 3);
 }
 export { apply };

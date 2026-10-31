@@ -404,7 +404,7 @@ export async function analyseFootage(o: AnalyseOpts): Promise<AnalysisResult> {
     result.planes=planes;
     const capabilities:any=await fetch(`/api/projects/${o.projectId}/spatial/status`,{signal:o.signal}).then(r=>r.ok?r.json():{}).catch(()=>({}));
     /* the native path (COLMAP + SAM 2) takes minutes; it is offered, not forced: these say when it would help */
-    result.walking=trackTranslation(track,tw,th)>.08;result.subjectsSeen=frames.some((f:any)=>f?.subjects?.length||f?.box);
+    result.walking=trackTranslation(track,tw,th)>.08;result.subjectsSeen=frames.some((f:any)=>(f?.subjects??(f?.box?[f]:[])).some((x:any)=>x.box&&x.box[3]-x.box[1]>=.08*th)); /* people, not specks */
     const strategy=planSpatialAnalysis({requested:o.engine??'auto',error:track.medianError??0,inlierShare:track.inlierShare??0,lostShare:(track as any).lostShare??0,motionExtent:trackMotionExtent(track,tw,th),sceneMotion:scene?.motion??'',native:!!capabilities.native,advanced:!!capabilities.advanced,availableBytes:capabilities.availableBytes??Infinity});result.strategy=strategy;if(strategy.limited)notes.push(strategy.limited);
     if(!src.image&&strategy.geometry==='spatial'){
       try{result.spatial=await reconstructSpatial(o.projectId,o.src.split('#')[0],result.from,result.to,o.signal,(share,message)=>o.onProgress?.(.94+share*.05,message),content);if(result.spatial){const index=notes.findIndex(n=>n.startsWith('Planar solve:'));if(index>=0)notes.splice(index,1);notes.push('Calibrated COLMAP camera and sparse world geometry available. World pins require verified local geometry.');}}

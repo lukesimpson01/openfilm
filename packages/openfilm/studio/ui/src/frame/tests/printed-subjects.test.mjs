@@ -28,3 +28,10 @@ test('finds the stretch where a person walks across the element, with that perso
   assert.ok(c.instances[0].box.every((v) => v >= 0 && v <= 1));
   assert.equal(crossingPeople({ times, frames: times.map(() => ({ subjects: [] })) }, track, quad, { w: 320, h: 180 }), null);
 });
+
+test('specks the masks call subjects (a reflection, a figure in a picture) are not people crossing the text', async () => {
+  const { crossingPeople } = await import('../printed-subjects.js');
+  /* the hallway clip's two "subjects": 14×10 px and 6×7 px blobs on a 180×320 frame */
+  const frames = times.map(() => ({ subjects: [{ box: [120, 60, 134, 70] }, { box: [104, 120, 110, 127] }] }));
+  assert.equal(crossingPeople({ times, frames }, track, quad, { w: 180, h: 320 }), null);
+});

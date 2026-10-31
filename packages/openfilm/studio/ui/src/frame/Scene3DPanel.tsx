@@ -7,6 +7,7 @@ import { addCamera, CAMERA_PRESETS, CAMERA3D_PRESETS } from './camera';
 import { analyseFootage, findCachedAnalysis, readScanFrames, type AnalysisResult, type Quality, type ScanFrames, type Seen } from './analysis';
 import { suggestSpots } from './cling.js';
 import { printedOnSurface, crossingPeople } from './printed-subjects.js';
+import { orientedQuad, intrinsics } from './local-surface.js';
 import { reconstructOcclusion } from './spatial-analysis';
 import { findSurface, type FoundSurface } from './surface-client';
 import { footageRect, clipFit, clamp, fitItem } from './track-space.js';
@@ -36,6 +37,15 @@ const LABEL: Record<string, string> = { bottomLeft: 'Bottom left', bottomRight: 
 const row = 'flex items-center gap-2 text-[12px] text-[var(--text-dim)]';
 type Tool = 'devices' | 'camera' | 'track'|'models';
 let lastTool: Tool = 'devices';
+/** a surface orientation in a word (normals point into the surface; y is down): null is no tilt */
+const facingName=(n:[number,number,number]|null)=>!n?'Flat':Math.abs(n[1])>.95?(n[1]>0?'Floor':'Ceiling'):Math.abs(n[0])>.85?'Side wall':'Wall';
+/** how the text would sit for that orientation, drawn small: its quad at the click, fitted into a 30×20 box */
+function FacingShape({ normal, click, w, h }: { normal: [number, number, number] | null; click: [number, number]; w: number; h: number }) {
+  const q: number[][] = normal ? orientedQuad(click, normal, intrinsics(w, h), { width: 0.4 }) : [[0, 0], [5, 0], [5, 3], [0, 3]];
+  const xs = q.map((p) => p[0]), ys = q.map((p) => p[1]), x0 = Math.min(...xs), y0 = Math.min(...ys), k = Math.min(26 / Math.max(1e-6, Math.max(...xs) - x0), 16 / Math.max(1e-6, Math.max(...ys) - y0));
+  const pts = q.map((p) => `${(2 + (p[0] - x0) * k).toFixed(1)},${(2 + (p[1] - y0) * k).toFixed(1)}`).join(' ');
+  return <svg aria-hidden width={30} height={20} viewBox="0 0 30 20" className="shrink-0"><polygon points={pts} fill="currentColor" fillOpacity={.18} stroke="currentColor" strokeWidth={1.2} strokeLinejoin="round" /></svg>;
+}
 /** The Elements panel can start the surface-placement flow without adding a regular title first. */
 export function openSceneTracking() { lastTool = 'track'; window.dispatchEvent(new CustomEvent('frame-open-tab', { detail: 'scene3d' })); }
 const MEDIA = /\.(mp4|mov|webm|m4v|mkv|png|jpe?g|webp|gif|avif)$/i;
@@ -159,6 +169,10 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   const spots=React.useMemo(()=>scan?suggestSpots(scan.grays[0],scan.w,scan.h,{content:result?.content}):[],[scan,result?.content]); // eslint-disable-line react-hooks/exhaustive-deps
   type Surf={for:unknown;state:'working'|'ready'|'none';data?:FoundSurface};
   const [surface,setSurface]=React.useState<Surf|null>(null);
+  /* "which way does it face?": the orientation the person picked for this point (null: the one found), and the choices
+     the first look offered, kept while they switch between them */
+  const [facing,setFacing]=React.useState<[number,number,number]|null>(null),[choices,setChoices]=React.useState<{for:unknown;list:([number,number,number]|null)[]}|null>(null);
+  React.useEffect(()=>{setFacing(null);setChoices(null);},[pick]);
   const globalTrack=result?.track?sceneTracks[result.track]:null;
   React.useEffect(()=>{
     /* a click on a person: the text belongs to the background behind (or in front of) them, which the scene's own camera track already holds; a patch there would follow the person */
@@ -166,12 +180,15 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     if(result.scene?.planes?.some(pl=>pointInside([pick.x,pick.y],pl.quad))){setSurface(null);return;} /* a surface the scene reader found keeps its own plane */
     const k=Math.max(0,Math.min(scan.times.length-1,Math.round(((pick.time??sceneTime)-result.from)*result.fps))),click:[number,number]=[pick.currentX*result.w,pick.currentY*result.h];
     const ctl=new AbortController();setSurface({for:pick,state:'working'});
-    findSurface(scan,k,click,globalTrack&&(globalTrack as any).frames?.length===scan.times.length?globalTrack:null,ctl.signal).then(data=>{if(!ctl.signal.aborted)setSurface({for:pick,state:'ready',data});}).catch(()=>{if(!ctl.signal.aborted)setSurface({for:pick,state:'none'});});
+    findSurface(scan,k,click,globalTrack&&(globalTrack as any).frames?.length===scan.times.length?globalTrack:null,ctl.signal,facing).then(data=>{if(ctl.signal.aborted)return;setSurface({for:pick,state:'ready',data});
+      if(!data.chosen)setChoices({for:pick,list:data.alternatives?.length?[data.tilted?data.normal:null,...data.alternatives]:[]});}).catch(()=>{if(!ctl.signal.aborted)setSurface({for:pick,state:'none'});});
     return()=>ctl.abort();
-  },[pick,scan,result?.id,!!globalTrack,onSubject]); // eslint-disable-line react-hooks/exhaustive-deps
+  },[pick,scan,result?.id,!!globalTrack,onSubject,facing]); // eslint-disable-line react-hooks/exhaustive-deps
   /* people who walk across the chosen spot: only they, and only then, get precise (SAM 2) masks, on request */
   const [matteMeta,setMatteMeta]=React.useState<any>(null);
   React.useEffect(()=>{setMatteMeta(null);if(!result?.matte)return;let live=true;void fetch(`${folder}${result.matte}`,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{if(live)setMatteMeta(v);}).catch(()=>{});return()=>{live=false;};},[folder,result?.matte]);
+  /* people in the shot, from the masks themselves (a scan saved before specks were told apart says so from its own flag) */
+  const peopleSeen=matteMeta?.frames?(matteMeta.frames as any[]).some(fr=>(fr?.subjects??[]).some((x:any)=>x?.box&&x.box[3]-x.box[1]>=.08*(matteMeta.trackH??result?.h??320))):!!result?.subjectsSeen;
   const crossing=React.useMemo(()=>{
     if(!matteMeta||!result||!pick)return null;
     if(surface?.state==='ready'&&surface.data)return crossingPeople(matteMeta,surface.data.result,surface.data.quad,{w:result.w,h:result.h});
@@ -229,6 +246,8 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     const C = result.content ?? { x: 0, y: 0, w: 1, h: 1 };
     const anchor: [number, number] = S && pick ? [pick.currentX! * result.w, pick.currentY! * result.h] : [result.w * (pick?.x ?? C.x + C.w * .5), result.h * (pick?.y ?? C.y + C.h * (template === 'location' ? .4 : .76))];
     const items = mode === 'textBehind' ? [spatialItem(sceneItem({...fitItem(itemFor(template, text, anchor, result.h), C, result.w, result.h),anchor,sceneDepth,anim:'rise',in:.45,animOut:'fade',out:.3},sceneForItem,result.w,result.h,'auto',planesForItem),result.spatial?sceneTracks[result.spatial]:null,pick?.time??sceneTime,result.w,result.h,pick?.currentX!=null&&result.spatial&&sceneTracks[result.spatial]?[pick.currentX*sceneTracks[result.spatial].width,pick.currentY!*sceneTracks[result.spatial].height]:undefined)] : [];
+    /* white words on a white wall cannot be read: over a light patch of the picture the text goes dark, with a light edge */
+    if(scan&&items[0]&&mode==='textBehind'&&/^#f{3,6}$/i.test(String(items[0].color??''))){const k=Math.max(0,Math.min(scan.grays.length-1,Math.round(((pick?.time??sceneTime)-result.from)*result.fps))),g=scan.grays[k],[ax,ay]=anchor,r=Math.max(4,Math.round(result.w*.05));let sum=0,n=0;for(let y=Math.max(0,Math.round(ay-r));y<Math.min(scan.h,ay+r);y++)for(let x=Math.max(0,Math.round(ax-r*2));x<Math.min(scan.w,ax+r*2);x++){sum+=g[y*scan.w+x];n++;}if(n&&sum/n>170)Object.assign(items[0],{color:'#15171c',strokeColor:'rgba(255,255,255,0.6)'});}
     if(pick?.spatialAnchor&&items[0]){const solution=sceneTracks[result.spatial!],a=anchorFor(pick),pose=spatialPoseAt(solution,Math.round((pick.time??sceneTime)*1e6)),p=projectWorld(a.position,pose);if(!p)throw Error('This point is behind the source camera. Choose a visible source frame.');Object.assign(items[0],{place:a.type==='surface'?'surface':'standing',spatialAnchor:{...a,depthOffset:(.5-sceneDepth)*2},worldHeight:(items[0].size/result.h)*solution.height/pose.intrinsics[1][1]*p.depth,spatialWarning:undefined});}
     if(result.spatial&&items[0]&&!items[0].spatialAnchor){setAmbiguous(true);throw Error('This point has no verified surface. Choose a floating depth or another surface.');}
     const name = mode !== 'textBehind' ? EFFECT_MODES[mode] : template === 'walkThrough' ? 'Walk Through Text' : template === 'giant' ? 'Walk Past Giant Title' : template === 'surface' ? 'Tracked text on surface' : template === 'floating' ? 'Text Above Ground' : template === 'location' ? 'Location Title' : '3D Text in Scene';
@@ -338,8 +357,8 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                 {progress ? <ScanProgress share={progress.share} msg={progress.msg} seen={seen} onCancel={() => abort.current?.abort()} />
                   : <button type="button" disabled={!size} onClick={analyse} className={`${result?T.secondary:T.primary} h-9`}><ScanLine size={14} />{result ? 'Scan again' : isPhoto ? 'Scan photo' : 'Scan footage'}</button>}
                 {!progress && result ? <p className="text-[11px] text-[var(--text-muted)]">Camera motion <b className="font-semibold text-[var(--text)]">{result.quality}</b> · {result.medianError} px{result.occlusion ? ' · precise people masks' : result.matte ? ' · foreground ready' : ''}</p> : null}
-                {!progress && result && !result.spatial && !isPhoto && !pick && (result.walking || result.subjectsSeen) && <div className="flex flex-col gap-1.5 rounded-lg bg-[var(--fill-tsp)] p-2.5">
-                  <p className="text-[11.5px] text-[var(--text-dim)]">{result.subjectsSeen ? 'People cross this shot. Precise masks keep text cleanly behind them.' : 'The camera travels here. A 3D solve holds text to every surface.'}</p>
+                {!progress && result && !result.spatial && !isPhoto && !pick && (result.walking || peopleSeen) && <div className="flex flex-col gap-1.5 rounded-lg bg-[var(--fill-tsp)] p-2.5">
+                  <p className="text-[11.5px] text-[var(--text-dim)]">{peopleSeen ? 'People cross this shot. Precise masks keep text cleanly behind them.' : 'The camera travels here. A 3D solve holds text to every surface.'}</p>
                   <button type="button" onClick={()=>setTrackEngine('advanced')} className={T.secondary}>Sharpen with 3D and precise masks</button>
                   <p className={T.hint}>Runs on this computer and can take several minutes. You can keep editing.</p>
                 </div>}
@@ -363,9 +382,13 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                     {crossing&&!preciseCovers(result,crossing)&&<div className="flex flex-col gap-1.5 rounded-lg bg-[var(--fill-tsp)] p-2.5">
                       <p className="text-[11.5px] text-[var(--text-dim)]">{crossing.instances.length===1?'Someone walks':'People walk'} across this spot ({crossing.from.toFixed(1)}–{crossing.to.toFixed(1)}s).</p>
                       {precise?<ScanProgress share={precise.share} msg={precise.msg} seen={null} onCancel={()=>preciseAbort.current?.abort()}/>:<button type="button" onClick={makePrecise} className={T.secondary}>Make their edges precise</button>}
-                      {!precise&&<p className={T.hint}>Follows {crossing.instances.length===1?'them':'them'} with SAM 2 on this computer, about {preciseMinutes(crossing)} min on a laptop CPU (measured: 11 min for 4 s with two people). You can keep editing.</p>}
+                      {!precise&&<p className={T.hint}>Follows {crossing.instances.length===1?'that person':'them'} with SAM 2 on this computer, about {preciseMinutes(crossing)} min on a laptop CPU (measured: 11 min for 4 s with two people). You can keep editing.</p>}
                     </div>}
                     {preciseCovers(result,crossing)&&<p className={T.hint}>Precise people masks are on for this spot.</p>}
+                    {!result.spatial&&choices?.for===pick&&choices.list.length>1&&<div className="flex flex-col gap-1.5" data-surface-choice>
+                      <p className={T.hint}>{facing?'Using your pick.':'Not sure which way this faces. Which is it?'}</p>
+                      <div className={segWrap} role="group" aria-label="Which way the surface faces">{choices.list.map((n,i)=>{const on=facing?(!!n&&n.every((v,j)=>Math.abs(v-facing[j])<1e-6)):i===0;return <button key={i} type="button" aria-pressed={on} disabled={surface?.state==='working'} className={`${seg(on)} flex items-center justify-center gap-1.5`} onClick={()=>setFacing(i===0?null:n)}><FacingShape normal={n} click={[(pick.currentX??.5)*result.w,(pick.currentY??.5)*result.h]} w={result.w} h={result.h}/>{facingName(n)}</button>;})}</div>
+                    </div>}
                     {!result.spatial&&surface&&<p className={T.hint} role="status">{surface.state==='working'?'Reading the surface…':surface.state==='ready'&&surface.data?.tilted?'The text will lie on this surface, tilted with it.':'The text will follow this surface.'}</p>}
                     <button type="button" disabled={busy||surface?.state==='working'||!!result.spatial&&!pick.spatialAnchor} onClick={()=>void addTrack('surface')} className={T.primary}><Plus size={13}/>{busy?'Adding text…':'Add text'}</button>
                   </div>}
