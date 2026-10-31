@@ -362,3 +362,17 @@ test('media is dated when it came into the project: a copy now, a link when it w
   assert.equal(of('assets/linked.mp4').mtime, new Date('2020-01-01').getTime());
   assert.equal(of('assets/here.png').added, of('assets/here.png').mtime);
 });
+
+test('the media library leaves out the editor’s analysis caches but keeps media beside them', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'of-analysis-'));
+  for (const sub of ['assets/spatial/abc/camera-frames', 'assets/track', 'assets/mattes/x', 'assets/video']) mkdirSync(join(dir, sub), { recursive: true });
+  writeFileSync(join(dir, 'assets/spatial/abc/camera-frames/000001.jpg'), 'x');
+  writeFileSync(join(dir, 'assets/track/t.json'), '{}');
+  writeFileSync(join(dir, 'assets/mattes/x/atlas-0.png'), 'x');
+  writeFileSync(join(dir, 'assets/video/clip.mp4'), 'x');
+  const { files } = await listFiles(dir);
+  const paths = files.map((f) => f.path);
+  assert.ok(paths.includes('assets/video/clip.mp4'), JSON.stringify(paths));
+  assert.ok(!paths.some((p) => /assets\/(spatial|track|mattes)\//.test(p)), JSON.stringify(paths));
+  rmSync(dir, { recursive: true, force: true });
+});

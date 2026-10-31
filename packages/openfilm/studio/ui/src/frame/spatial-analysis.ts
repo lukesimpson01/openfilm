@@ -7,8 +7,9 @@ export async function reconstructSpatial(projectId:string,src:string,from:number
  finally{signal?.removeEventListener('abort',cancel);}
 }
 
-export async function reconstructOcclusion(projectId:string,src:string,from:number,to:number,solution:string,instances:{box:number[]}[],signal:AbortSignal|undefined,progress:(share:number,message:string)=>void){
- const base=`/api/projects/${projectId}/spatial`,r=await fetch(base+'/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'occlusion',src,from,to,solution,instances,fps:8,maxFrames:240}),signal}),initial=await r.json();if(!r.ok)throw Error(initial.error||'Enhanced occlusion unavailable.');
+/** opts.fps / opts.maxFrames: a short targeted interval (people crossing one element) can afford a denser sampling. */
+export async function reconstructOcclusion(projectId:string,src:string,from:number,to:number,solution:string|null,instances:{box:number[]}[],signal:AbortSignal|undefined,progress:(share:number,message:string)=>void,opts:{fps?:number;maxFrames?:number}={}){
+ const base=`/api/projects/${projectId}/spatial`,r=await fetch(base+'/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'occlusion',src,from,to,...(solution?{solution}:{}),instances,fps:opts.fps??8,maxFrames:opts.maxFrames??240}),signal}),initial=await r.json();if(!r.ok)throw Error(initial.error||'Enhanced occlusion unavailable.');
  const cancel=()=>{void fetch(base+'/jobs/'+initial.id,{method:'DELETE'}).catch(()=>{});};signal?.addEventListener('abort',cancel,{once:true});try{let job=initial;while(job.state!=='done'){signal?.throwIfAborted();if(['error','cancelled'].includes(job.state))throw Error(job.error||'Enhanced occlusion cancelled.');progress(job.share,job.stage);await new Promise(ok=>setTimeout(ok,700));job=await fetch(base+'/jobs/'+initial.id,{signal}).then(r=>r.json());}return job.path as string;}finally{signal?.removeEventListener('abort',cancel);}
 }
 

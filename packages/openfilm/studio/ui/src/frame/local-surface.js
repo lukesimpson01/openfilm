@@ -73,7 +73,10 @@ export function surfaceNormal(homographies, K, ray, others = null) {
   const front = (n) => { if (!ray) return true; const r = [0, 1, 2].map((i) => dot(n.R[i], ray)), depth = r[2] + n.td[2] * dot(n, ray); return dot(n, ray) > 0.08 && depth > 0.02; };
   const sets = homographies.map((H, i) => {
     const c = normalCandidates(H, K)?.filter(front), g = others?.[i] ? normalCandidates(others[i], K) : null;
-    if (c && g?.length) for (const n of c) n.agree = Math.min(...g.map((o) => turnBetween(n.R, o.R)));
+    /* the camera travels one way for every surface in the shot: the real solution's travel direction (t/d) matches one of
+       the scene's own, its mirror's points along the surface normal instead */
+    const dir = (v) => { const l = Math.hypot(v[0], v[1], v[2]); return l > 1e-6 ? [v[0] / l, v[1] / l, v[2] / l] : null; };
+    if (c && g?.length) for (const n of c) { const a = dir(n.td); n.agree = Math.min(...g.map((o) => { const b = dir(o.td); return a && b ? angle(a, b) : turnBetween(n.R, o.R); })); }
     return c;
   }).filter((c) => c?.length);
   if (!sets.length) return null;

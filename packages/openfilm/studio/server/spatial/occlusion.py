@@ -5,7 +5,8 @@ import os,sys,json,time,argparse,shutil
 from pathlib import Path
 import numpy as np,cv2,torch
 from engine import frames,progress,peak_rss,watch_memory
-cv2.setNumThreads(2);torch.set_num_threads(2)
+# SAM 2 on a laptop CPU is bound by its image encoder: use the physical cores (capped), not two.
+cv2.setNumThreads(2);torch.set_num_threads(max(2,min(6,(os.cpu_count() or 4)//2)))
 
 def guided_alpha(mask,image):
     guide=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY).astype(np.float32)/255.;p=mask.astype(np.float32)

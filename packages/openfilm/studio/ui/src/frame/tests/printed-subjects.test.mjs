@@ -16,3 +16,15 @@ test('a person walking in front of the poster crosses it, so nothing is excluded
   const frames = times.map((_, i) => ({ subjects: [{ box: [100 + 12 * i, 50, 130 + 12 * i, 140] }] }));
   assert.equal(printedOnSurface({ times, frames }, track, quad), null);
 });
+
+test('finds the stretch where a person walks across the element, with that person’s box to follow', async () => {
+  const { crossingPeople } = await import('../printed-subjects.js');
+  /* the person reaches the poster at frame 5 and leaves after frame 12 */
+  const frames = times.map((_, i) => ({ subjects: [{ box: [20 + 14 * i, 30, 60 + 14 * i, 170] }] }));
+  const c = crossingPeople({ times, frames }, track, quad, { w: 320, h: 180 });
+  assert.ok(c, 'found');
+  assert.ok(c.from >= 0.2 && c.from <= 0.5, `from ${c.from}`);
+  assert.equal(c.instances.length, 1);
+  assert.ok(c.instances[0].box.every((v) => v >= 0 && v <= 1));
+  assert.equal(crossingPeople({ times, frames: times.map(() => ({ subjects: [] })) }, track, quad, { w: 320, h: 180 }), null);
+});

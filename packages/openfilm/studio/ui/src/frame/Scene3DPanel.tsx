@@ -6,7 +6,8 @@ import { DEVICE_PRESETS, presetScene, addScene3d, DEFAULT_QUICK, START_FROM, FIN
 import { addCamera, CAMERA_PRESETS, CAMERA3D_PRESETS } from './camera';
 import { analyseFootage, findCachedAnalysis, readScanFrames, type AnalysisResult, type Quality, type ScanFrames, type Seen } from './analysis';
 import { suggestSpots } from './cling.js';
-import { printedOnSurface } from './printed-subjects.js';
+import { printedOnSurface, crossingPeople } from './printed-subjects.js';
+import { reconstructOcclusion } from './spatial-analysis';
 import { findSurface, type FoundSurface } from './surface-client';
 import { footageRect, clipFit, clamp, fitItem } from './track-space.js';
 import { addTracked, itemFor, EFFECT_MODES, type EffectMode } from './tracked';
@@ -168,9 +169,27 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     findSurface(scan,k,click,globalTrack&&(globalTrack as any).frames?.length===scan.times.length?globalTrack:null,ctl.signal).then(data=>{if(!ctl.signal.aborted)setSurface({for:pick,state:'ready',data});}).catch(()=>{if(!ctl.signal.aborted)setSurface({for:pick,state:'none'});});
     return()=>ctl.abort();
   },[pick,scan,result?.id,!!globalTrack,onSubject]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* people who walk across the chosen spot: only they, and only then, get precise (SAM 2) masks, on request */
+  const [matteMeta,setMatteMeta]=React.useState<any>(null);
+  React.useEffect(()=>{setMatteMeta(null);if(!result?.matte)return;let live=true;void fetch(`${folder}${result.matte}`,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{if(live)setMatteMeta(v);}).catch(()=>{});return()=>{live=false;};},[folder,result?.matte]);
+  const crossing=React.useMemo(()=>{
+    if(!matteMeta||!result||!pick)return null;
+    if(surface?.state==='ready'&&surface.data)return crossingPeople(matteMeta,surface.data.result,surface.data.quad,{w:result.w,h:result.h});
+    /* a click on a person: the background track carries the spot, a box around it is where people cross */
+    if(onSubject&&globalTrack){const x=pick.x*result.w,y=pick.y*result.h,r=result.w*.12;return crossingPeople(matteMeta,globalTrack,[[x-r,y-r*.6],[x+r,y-r*.6],[x+r,y+r*.6],[x-r,y+r*.6]],{w:result.w,h:result.h});}
+    return null;
+  },[surface,matteMeta,result?.w,result?.h,pick,onSubject,!!globalTrack]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [precise,setPrecise]=React.useState<{share:number;msg:string}|null>(null),preciseAbort=React.useRef<AbortController|null>(null);
+  const preciseCovers=(r:AnalysisResult|undefined,c:{from:number;to:number}|null)=>!!(r&&c&&(r as any).occlusionRange&&(r as any).occlusionRange[0]<=c.from+.05&&(r as any).occlusionRange[1]>=c.to-.05);
+  /* measured on a 4-core 2019 MacBook Pro: 11.4 min for 4.2 s with two people (SAM 2 tiny, depth, edge refinement) */
+  const preciseMinutes=(c:{from:number;to:number;instances:unknown[]})=>Math.max(1,Math.round((c.to-c.from)*(0.9+0.9*c.instances.length)));
+  const makePrecise=()=>{if(!crossing||!result||!f||precise)return;const ctl=new AbortController();preciseAbort.current=ctl;setPrecise({share:0,msg:'Starting'});
+    void reconstructOcclusion(projectId,f.clip.src.split('#')[0],crossing.from,crossing.to,result.spatial??null,crossing.instances,ctl.signal,(share,msg)=>{if(!ctl.signal.aborted)setPrecise({share,msg});},{fps:6,maxFrames:36})
+      .then(async path=>{if(ctl.signal.aborted)return;const updated={...result,occlusion:path,occlusionRange:[crossing.from,crossing.to]} as AnalysisResult;results.set(cacheKey,updated);await putFile(projectId,`assets/track/${result.id}.result.json`,JSON.stringify(updated),{overwrite:true});setPrecise(null);refreshCache(v=>v+1);notify('Precise people masks are ready for this spot.');})
+      .catch(e=>{setPrecise(null);if(!ctl.signal.aborted)notify(e instanceof Error?e.message:String(e));});};
   const footageVisible=!!f&&at>=f.start&&at<Math.min(f.end,f.start+((size?.duration??Infinity)-(f.clip.time?.[0]??0))/(f.clip.speed??1));
   React.useEffect(()=>{
-    if(tool!=='track'||!f||!result||progress||prompted.current===result)return;
+    if(tool!=='track'||!f||!result||progress||prompted.current?.id===result.id)return; /* a scan improved in place (precise masks) keeps the chosen point */
     prompted.current=result;setPick(null);setAmbiguous(false);setPicking(true);
     if(!footageVisible)window.dispatchEvent(new CustomEvent('frame-seek',{detail:f.start+.03}));
   },[tool,f?.clip.id,result,progress,footageVisible]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -319,7 +338,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                 {progress ? <ScanProgress share={progress.share} msg={progress.msg} seen={seen} onCancel={() => abort.current?.abort()} />
                   : <button type="button" disabled={!size} onClick={analyse} className={`${result?T.secondary:T.primary} h-9`}><ScanLine size={14} />{result ? 'Scan again' : isPhoto ? 'Scan photo' : 'Scan footage'}</button>}
                 {!progress && result ? <p className="text-[11px] text-[var(--text-muted)]">Camera motion <b className="font-semibold text-[var(--text)]">{result.quality}</b> · {result.medianError} px{result.occlusion ? ' · precise people masks' : result.matte ? ' · foreground ready' : ''}</p> : null}
-                {!progress && result && !result.spatial && !isPhoto && (result.walking || result.subjectsSeen) && <div className="flex flex-col gap-1.5 rounded-lg bg-[var(--fill-tsp)] p-2.5">
+                {!progress && result && !result.spatial && !isPhoto && !pick && (result.walking || result.subjectsSeen) && <div className="flex flex-col gap-1.5 rounded-lg bg-[var(--fill-tsp)] p-2.5">
                   <p className="text-[11.5px] text-[var(--text-dim)]">{result.subjectsSeen ? 'People cross this shot. Precise masks keep text cleanly behind them.' : 'The camera travels here. A 3D solve holds text to every surface.'}</p>
                   <button type="button" onClick={()=>setTrackEngine('advanced')} className={T.secondary}>Sharpen with 3D and precise masks</button>
                   <p className={T.hint}>Runs on this computer and can take several minutes. You can keep editing.</p>
@@ -341,6 +360,12 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                     {pick.spatialAnchor?.edgeOnSurface&&<p className={T.hint}>The surface here is seen almost edge-on, so the text stands at its depth facing the camera.</p>}
                     {pick.spatialAnchor?.type==='surface'&&<div className={segWrap} role="group" aria-label="How the text sits"><button type="button" aria-pressed={stick} className={seg(stick)} onClick={()=>setStick(true)}>Stick to surface</button><button type="button" aria-pressed={!stick} className={seg(!stick)} onClick={()=>setStick(false)}>Float, face me</button></div>}
                     {onSubject&&(result.matte||result.occlusion)&&<div className="flex flex-col gap-1"><p className="text-[12px] font-medium text-[var(--text)]">That's something the scan found. Where should the text go?</p><div className={segWrap} role="group" aria-label="Order with the detected subject">{(['behind','front'] as const).map(m=><button key={m} type="button" aria-pressed={foreground===m} className={seg(foreground===m)} onClick={()=>setForeground(m)}>{m==='front'?'In front of it':'Behind it'}</button>)}</div></div>}
+                    {crossing&&!preciseCovers(result,crossing)&&<div className="flex flex-col gap-1.5 rounded-lg bg-[var(--fill-tsp)] p-2.5">
+                      <p className="text-[11.5px] text-[var(--text-dim)]">{crossing.instances.length===1?'Someone walks':'People walk'} across this spot ({crossing.from.toFixed(1)}–{crossing.to.toFixed(1)}s).</p>
+                      {precise?<ScanProgress share={precise.share} msg={precise.msg} seen={null} onCancel={()=>preciseAbort.current?.abort()}/>:<button type="button" onClick={makePrecise} className={T.secondary}>Make their edges precise</button>}
+                      {!precise&&<p className={T.hint}>Follows {crossing.instances.length===1?'them':'them'} with SAM 2 on this computer, about {preciseMinutes(crossing)} min on a laptop CPU (measured: 11 min for 4 s with two people). You can keep editing.</p>}
+                    </div>}
+                    {preciseCovers(result,crossing)&&<p className={T.hint}>Precise people masks are on for this spot.</p>}
                     {!result.spatial&&surface&&<p className={T.hint} role="status">{surface.state==='working'?'Reading the surface…':surface.state==='ready'&&surface.data?.tilted?'The text will lie on this surface, tilted with it.':'The text will follow this surface.'}</p>}
                     <button type="button" disabled={busy||surface?.state==='working'||!!result.spatial&&!pick.spatialAnchor} onClick={()=>void addTrack('surface')} className={T.primary}><Plus size={13}/>{busy?'Adding text…':'Add text'}</button>
                   </div>}

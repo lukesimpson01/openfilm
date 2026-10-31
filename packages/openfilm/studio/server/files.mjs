@@ -28,6 +28,9 @@ export const ASSETS = 'assets';
 /* folders that hold no pages of the film (a dot folder is a tool's, and never looked in; skills/ holds the project's
    skills, src/skills.mjs) */
 const SKIP = new Set(['node_modules', 'dist', 'build', 'lib', 'vendor', 'skills', ASSETS]);
+/** The editor's own analysis caches inside assets/ (tracks, masks, 3D solves): never media to place, and hundreds of
+ * frames each, so the media library leaves them out instead of probing every one. */
+const ANALYSIS = new Set(['spatial', 'track', 'mattes', 'scene', 'tracking2d']);
 
 export class FileError extends Error {
   /** @param {string} message @param {number} status */
@@ -203,6 +206,7 @@ export async function listFiles(root) {
         continue;
       }
       if (entry.isDirectory()) {
+        if (media && dir === join(root, ASSETS) && ANALYSIS.has(entry.name)) continue;
         if (media) { folders.push(rel); if (depth < 8) await walk(abs, depth + 1, true); }
         else if (!SKIP.has(entry.name) && depth < 3) await walk(abs, depth + 1, false);
         continue;

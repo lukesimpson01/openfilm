@@ -33,3 +33,27 @@ export function printedOnSurface(matte, track, quad) {
   const xs = still.flatMap((h) => h.corners.map((p) => p[0])), ys = still.flatMap((h) => h.corners.map((p) => p[1]));
   return [median(xs.filter((x) => x <= mx)), median(ys.filter((y) => y <= my)), median(xs.filter((x) => x >= mx)), median(ys.filter((y) => y >= my))];
 }
+
+/**
+ * Who walks across the element and when: the stretch where detected people overlap its surface (printed figures
+ * excluded), at most `longest` seconds from the first overlap, with those people's boxes on that first frame (0…1 of
+ * the frame) so a precise segmenter can follow exactly them. Null when nobody crosses it.
+ * @param {any} matte @param {any} track @param {number[][]} quad
+ * @param {{ w: number, h: number, longest?: number, pad?: number }} opts
+ * @returns {{ from: number, to: number, instances: { box: number[] }[] } | null}
+ */
+export function crossingPeople(matte, track, quad, { w, h, longest = 4, pad = 0.15 }) {
+  if (!matte?.frames?.length || !track?.frames?.length || !quad?.length || !w || !h) return null;
+  const overlaps = (b, q) => { const xs = q.map((p) => p[0]), ys = q.map((p) => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), mx = (x1 - x0) * pad, my = (y1 - y0) * pad; return b[2] > x0 - mx && b[0] < x1 + mx && b[3] > y0 - my && b[1] < y1 + my; };
+  let start = -1, boxes = [], end = -1;
+  matte.frames.forEach((f, i) => {
+    const t = matte.times?.[i]; if (!Number.isFinite(t) || !f) return;
+    const H = transformAt(track, t), q = quad.map((p) => apply(H, p)), bottom = Math.max(...q.map((p) => p[1])), top = Math.min(...q.map((p) => p[1]));
+    const across = (f.subjects ?? []).filter((s) => { const b = s.box, c4 = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]; const printed = c4.every((c) => inside(c, q)) && b[3] < bottom - 0.08 * (bottom - top); return !printed && overlaps(b, q); });
+    if (!across.length) return;
+    if (start < 0) { start = t; boxes = across.slice(0, 4).map((s) => [s.box[0] / w, s.box[1] / h, s.box[2] / w, s.box[3] / h]); }
+    if (t - start <= longest) end = t;
+  });
+  if (start < 0) return null;
+  return { from: Math.max(0, start - 0.05), to: Math.max(end, start + 0.5) + 0.2, instances: boxes.map((box) => ({ box: box.map((v) => Math.min(1, Math.max(0, v))) })) };
+}

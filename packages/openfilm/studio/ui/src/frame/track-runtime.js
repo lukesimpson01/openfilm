@@ -352,18 +352,21 @@ export function createTracked(layer, root, options = {}) {
           const b0 = it.printedBox; if (b0) add([[b0[0], b0[1]], [b0[2], b0[1]], [b0[2], b0[3]], [b0[0], b0[3]]].map((c) => apply(p.H, c)));
           for (const sub of m?.info?.subjects ?? []) { const b = sub.box, c4 = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]; if (c4.every((c) => within(c, q)) && b[3] < bottom - 0.08 * (bottom - top)) add(c4); } }
         u.uExcludeN.value = n; }
+      /* precise people masks (SAM 2), where they were made for this stretch, replace the fast ones for the subject pass */
+      const preciseTex = nativeFrame?.unionTexture ?? null, precise = preciseTex ? { tex: preciseTex, rect: new THREE.Vector4(0, 0, 1, 1) } : null;
+      const subjectPass = () => { setFg(fg, main.v, precise ? { matte: precise } : {}); if (precise?.tex.image) fg.material.uniforms.uMatteSize.value.set(precise.tex.image.width, precise.tex.image.height); };
       if (depth === 'auto') {
         for (const p of placed) {
           if(p.o.it.spatialAnchor)continue;
           drawItem(p);
-          if (main && m?.info) { setFg(fg, main.v, {}); fg.material.uniforms.uGround.value = p.ground[1] / ph + (.5 - (p.o.it.sceneDepth ?? .5)) * .22; draw(fg); }
+          if (main && (m?.info || precise)) { subjectPass(); fg.material.uniforms.uGround.value = p.ground[1] / ph + (.5 - (p.o.it.sceneDepth ?? .5)) * .22; draw(fg); }
         }
         fg.material.uniforms.uGround.value = -1;
         for(const p of placed)if(p.o.it.spatialAnchor)drawItem(p);
         return;
       }
       for (const p of placed) if (!p.front) drawItem(p);
-      if (main && m?.info && mode === 'textBehind') { setFg(fg, main.v, {}); draw(fg); }
+      if (main && (m?.info || precise) && mode === 'textBehind') { subjectPass(); draw(fg); }
       for (const p of placed) if (p.front) drawItem(p);
     },
   };

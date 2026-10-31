@@ -82,8 +82,9 @@ async function ensureFontFile(projectId:string,name:string){
   })().catch(e=>{fontFiles.delete(key);throw e;}));return fontFiles.get(key);
 }
 /** Writes a project file that is not a page (an analysis, a mask atlas); returns where it landed (a name in use gets another). */
-export async function putFile(projectId: string, path: string, body: string | Blob): Promise<string> {
-  const r = await fetch(`${projectUrl(projectId)}/files?path=${encodeURIComponent(path)}`, { method: 'PUT', body });
+/** opts.overwrite: replace a file that is already there (otherwise the server keeps the existing one and refuses). */
+export async function putFile(projectId: string, path: string, body: string | Blob, opts: { overwrite?: boolean } = {}): Promise<string> {
+  const r = await fetch(`${projectUrl(projectId)}/files?path=${encodeURIComponent(path)}${opts.overwrite ? '&overwrite=1' : ''}`, { method: 'PUT', body });
   if (!r.ok) throw new Error(`could not write ${path}: ${r.status}`);
   return ((await r.json().catch(() => ({}))) as { path?: string }).path ?? path;
 }
