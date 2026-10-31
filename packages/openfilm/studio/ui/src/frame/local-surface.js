@@ -105,13 +105,17 @@ export function surfaceNormal(homographies, K, ray, others = null) {
 }
 
 /** a rectangle on the surface around the click, as the camera sees it: 4 pixel corners (TL TR BR BL) */
-export function orientedQuad(click, normal, K, { width = 0.4, aspect = 0.6 } = {}) {
+export function orientedQuad(click, normal, K, { width = 0.4, aspect = 0.6, offset = [0, 0], out = 0, spin = 0 } = {}) {
   const f = K[0], cx = K[2], cy = K[5], ray = norm([(click[0] - cx) / f, (click[1] - cy) / f, 1]);
-  const lambda = 1 / Math.max(0.05, dot(normal, ray)), C = scale3(ray, lambda);
+  const lambda = 1 / Math.max(0.05, dot(normal, ray));
   const up = [0, -1, 0]; let right = cross(up, normal); if (Math.hypot(...right) < 0.05) right = [1, 0, 0]; right = norm(right); if (right[0] < 0) right = scale3(right, -1);
   let planeUp = norm(cross(normal, right)); if (dot(planeUp, up) < 0) planeUp = scale3(planeUp, -1);
-  const project = (P) => [f * P[0] / P[2] + cx, f * P[1] / P[2] + cy];
-  const corners = (W) => [[-1, 1], [1, 1], [1, -1], [-1, -1]].map(([sx, sy]) => project(add3(C, add3(scale3(right, sx * W / 2), scale3(planeUp, sy * W * aspect / 2)))));
+  /* turned within the surface (spin, radians): the text's own rotation on the wall */
+  if (spin) { const c = Math.cos(spin), s2 = Math.sin(spin), r0 = right; right = add3(scale3(r0, c), scale3(planeUp, s2)); planeUp = add3(scale3(planeUp, c), scale3(r0, -s2)); }
+  const project = (P) => [f * P[0] / Math.max(1e-3, P[2]) + cx, f * P[1] / Math.max(1e-3, P[2]) + cy];
+  /* moved along the surface (offset: across, up, in widths of the text) and off it toward the camera (out) */
+  const placed = (W) => add3(scale3(ray, lambda), add3(add3(scale3(right, offset[0] * W), scale3(planeUp, offset[1] * W)), scale3(normal, -out * W)));
+  const corners = (W) => { const C = placed(W); return [[-1, 1], [1, 1], [1, -1], [-1, -1]].map(([sx, sy]) => project(add3(C, add3(scale3(right, sx * W / 2), scale3(planeUp, sy * W * aspect / 2))))); };
   let W = 1, q = corners(W); const span = (p) => Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]) / 2 + Math.hypot(p[2][0] - p[3][0], p[2][1] - p[3][1]) / 2;
   W = W * (width * 2 * cx) / Math.max(1e-6, span(q)); q = corners(W);
   return q;
@@ -184,7 +188,7 @@ export function trackPatch(grays, times, w, h, k, quad, global = null) {
  * Everything for a click on the footage: the tracked patch, the surface orientation and the quad to put text in.
  * click: pixel in the tracker's space at frame index k. Returns { quad, result, normal | null, quality, tilted }.
  */
-export function localSurface(grays, times, w, h, k, click, { global = null, focal, normal: chosen = null } = {}) {
+export function localSurface(grays, times, w, h, k, click, { global = null, focal, normal: chosen = null, orientOnly = false } = {}) {
   const K = intrinsics(w, h, focal), ray = norm([(click[0] - K[2]) / K[0], (click[1] - K[5]) / K[0], 1]);
   /* an orientation the person picked (the answer to "which way does it face?"): no estimate, just the patch on it */
   if (chosen) { const quad = orientedQuad(click, chosen, K, { width: 0.4 }), result = trackPatch(grays, times, w, h, k, quad, global); return { quad, result, normal: chosen, spread: 0, quality: result.quality, tilted: true, chosen: true, alternatives: [] }; }
@@ -214,6 +218,8 @@ export function localSurface(grays, times, w, h, k, click, { global = null, foca
   const steady = looks.reduce((b, l) => (l.assumed < b.assumed ? l : b), looks[0]);
   const normal = agreed ? norm(agreed.reduce((s2, l) => add3(s2, l.est.normal), [0, 0, 0])) : null;
   const alternatives = surfaceChoices(normal, agreed ? agreed.map((l) => l.est.alt).filter(Boolean) : looks.map((l) => l.raw).filter(Boolean), ray);
+  /* the diamonds only need which way each surface faces, not the whole clip's track */
+  if (orientOnly) return { normal, alternatives, tilted: !!agreed };
   if (!agreed) { const probe = trackPatch(grays, times, w, h, k, box(click, steady.f * w), global); return { quad: probe.plane, result: probe, normal: null, spread: null, quality: probe.quality, tilted: false, alternatives }; }
   const quad = orientedQuad(click, normal, K, { width: 0.4 }), result = trackPatch(grays, times, w, h, k, quad, global);
   return { quad, result, normal, spread: Math.max(...agreed.map((l) => angle(l.est.normal, normal))), quality: result.quality, tilted: true, alternatives };

@@ -20,3 +20,17 @@ export function findSurface(frames: ScanFrames, k: number, click: [number, numbe
     w.postMessage({ id, grays: frames.grays, times: frames.times, w: frames.w, h: frames.h, k, click, global, normal });
   });
 }
+
+/* Which way the surface under each diamond faces, in a worker of its own (a click never waits behind it), one spot at a
+   time; cancelled (the worker ended) when the scan or the clip changes. */
+export type SpotFacing = { normal: [number, number, number] | null; alternatives: [number, number, number][]; tilted: boolean };
+export function orientSpots(frames: ScanFrames, spots: [number, number][], global: unknown, onEach: (i: number, r: SpotFacing) => void, signal: AbortSignal): Promise<void> {
+  const w = new Worker(new URL('./local-surface-worker.js', import.meta.url), { type: 'module' });
+  return new Promise((resolve) => {
+    const end = () => { w.terminate(); resolve(); };
+    signal.addEventListener('abort', end, { once: true });
+    w.onmessage = (e) => { if (signal.aborted) return; if (e.data?.done) { signal.removeEventListener('abort', end); end(); return; } if (e.data?.ok) onEach(e.data.i, e.data.r as SpotFacing); };
+    w.onerror = () => { signal.removeEventListener('abort', end); end(); };
+    w.postMessage({ id: 1, spots, grays: frames.grays, times: frames.times, w: frames.w, h: frames.h, k: 0, global });
+  });
+}

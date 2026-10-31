@@ -9,7 +9,7 @@ import { suggestSpots } from './cling.js';
 import { printedOnSurface, crossingPeople } from './printed-subjects.js';
 import { orientedQuad, intrinsics } from './local-surface.js';
 import { reconstructOcclusion } from './spatial-analysis';
-import { findSurface, type FoundSurface } from './surface-client';
+import { findSurface, orientSpots, type FoundSurface, type SpotFacing } from './surface-client';
 import { footageRect, clipFit, clamp, fitItem } from './track-space.js';
 import { addTracked, itemFor, EFFECT_MODES, type EffectMode } from './tracked';
 import { footageAt } from './zoom';
@@ -37,6 +37,13 @@ const LABEL: Record<string, string> = { bottomLeft: 'Bottom left', bottomRight: 
 const row = 'flex items-center gap-2 text-[12px] text-[var(--text-dim)]';
 type Tool = 'devices' | 'camera' | 'track'|'models';
 let lastTool: Tool = 'devices';
+type Adjust={along:number;up:number;out:number;tilt:number;turn:number;spin:number;size:number};
+const ADJ0:Adjust={along:0,up:0,out:0,tilt:0,turn:0,spin:0,size:1};
+/** the hand adjustments, in plain words: across and up the surface (in text widths), off it toward the camera, its tilt
+ *  and turn (degrees, the surface's own), its spin on the surface and its size */
+const ADJUST_ROWS:[keyof Adjust,string,number,number,number][]=[['along','Left / right',-1.5,1.5,.02],['up','Up / down',-1.5,1.5,.02],['out','Forward / back',-.6,1.2,.02],['tilt','Tilt',-60,60,1],['turn','Turn',-60,60,1],['spin','Rotate',-180,180,1],['size','Size',.3,3,.02]];
+/** a surface normal turned about the vertical (turn) and tipped about the horizontal (tilt), radians */
+const turnTilt=(n:[number,number,number],turn:number,tilt:number):[number,number,number]=>{const c=Math.cos(turn),s=Math.sin(turn),a:[number,number,number]=[n[0]*c+n[2]*s,n[1],-n[0]*s+n[2]*c];const c2=Math.cos(tilt),s2=Math.sin(tilt),b:[number,number,number]=[a[0],a[1]*c2-a[2]*s2,a[1]*s2+a[2]*c2],l=Math.hypot(...b)||1;return [b[0]/l,b[1]/l,b[2]/l];};
 /** a surface orientation in a word (normals point into the surface; y is down): null is no tilt */
 const facingName=(n:[number,number,number]|null)=>!n?'Flat':Math.abs(n[1])>.95?(n[1]>0?'Floor':'Ceiling'):Math.abs(n[0])>.85?'Side wall':'Wall';
 /** how the text would sit for that orientation, drawn small: its quad at the click, fitted into a 30×20 box */
@@ -146,7 +153,12 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   }, [f?.clip.src, folder]); // eslint-disable-line react-hooks/exhaustive-deps
   const W = film?.stage?.w ?? 1080, H = film?.stage?.h ?? 1920;
   const rect = size ? footageRect(W, H, size.w, size.h, f?.clip.box, clipFit(f?.clip)) : { x: 0, y: 0, w: 1, h: 1 };
-  const srcRange = () => { const sp = f!.clip.speed || 1; const inP = f!.clip.time?.[0] ?? 0; return { from: round(inP), to: round(Math.min(size?.duration ?? Infinity, inP + (f!.end - f!.start) * sp)) }; };
+  /* what a scan covers: the clip as it shows on the timeline, or for a long one (a walk, a stream) a 12 s window from the
+     10 s stretch under the playhead; scrubbing inside the stretch keeps its scan, moving elsewhere scans that part */
+  const srcRange = () => { const sp = f!.clip.speed || 1; const inP = f!.clip.time?.[0] ?? 0, out = Math.min(size?.duration ?? Infinity, inP + (f!.end - f!.start) * sp);
+    if (out - inP <= 16) return { from: round(inP), to: round(out) };
+    const here = inP + Math.max(0, at - f!.start) * sp, from = Math.max(inP, Math.min(out - 12, inP + Math.floor((here - inP) / 10) * 10));
+    return { from: round(from), to: round(Math.min(out, from + 12)) }; };
   const cacheKey = f ? JSON.stringify([projectId, f.clip.id, f.clip.src, srcRange(), quality,trackSurface,trackEngine]) : '';
   const result = results.get(cacheKey);
   const [,refreshCache]=React.useState(0),[checked,setChecked]=React.useState(''),autoTried=React.useRef('');
@@ -167,12 +179,20 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   const [scan,setScan]=React.useState<ScanFrames|null>(null);
   React.useEffect(()=>{setScan(null);if(tool!=='track'||!f||!result||isPhoto)return;const ctl=new AbortController();void readScanFrames({folder,src:f.clip.src,result,signal:ctl.signal}).then(v=>{if(!ctl.signal.aborted)setScan(v);}).catch(()=>{});return()=>ctl.abort();},[tool,result?.id,f?.clip.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const spots=React.useMemo(()=>scan?suggestSpots(scan.grays[0],scan.w,scan.h,{content:result?.content}):[],[scan,result?.content]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* which way the surface under each diamond faces, found in the background once the frames are in: each diamond then
+     shows the plane text would take there, and a click on one starts from it */
+  const [facings,setFacings]=React.useState<Map<number,SpotFacing>>(new Map());
+  React.useEffect(()=>{setFacings(new Map());if(!scan||!spots.length||result?.spatial)return;const ctl=new AbortController(),g=result?.track?sceneTracks[result.track]:null;
+    void orientSpots(scan,spots.map(sp=>[sp.x,sp.y] as [number,number]),g&&(g as any).frames?.length===scan.times.length?g:null,(i,r)=>setFacings(m=>new Map(m).set(i,r)),ctl.signal);return()=>ctl.abort();},[scan,spots,result?.id,!!(result?.track&&sceneTracks[result.track])]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickSpot=React.useRef<number|null>(null);
   type Surf={for:unknown;state:'working'|'ready'|'none';data?:FoundSurface};
   const [surface,setSurface]=React.useState<Surf|null>(null);
   /* "which way does it face?": the orientation the person picked for this point (null: the one found), and the choices
      the first look offered, kept while they switch between them */
   const [facing,setFacing]=React.useState<[number,number,number]|null>(null),[choices,setChoices]=React.useState<{for:unknown;list:([number,number,number]|null)[]}|null>(null);
-  React.useEffect(()=>{setFacing(null);setChoices(null);},[pick]);
+  React.useEffect(()=>{setFacing(null);setChoices(null);setAdj(ADJ0);},[pick]);
+  /* the chosen spot moved, tilted, turned, spun or sized by hand: the plane text goes on, rebuilt from the same point */
+  const [adj,setAdj]=React.useState<Adjust>(ADJ0);
   const globalTrack=result?.track?sceneTracks[result.track]:null;
   React.useEffect(()=>{
     /* a click on a person: the text belongs to the background behind (or in front of) them, which the scene's own camera track already holds; a patch there would follow the person */
@@ -180,13 +200,24 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     if(result.scene?.planes?.some(pl=>pointInside([pick.x,pick.y],pl.quad))){setSurface(null);return;} /* a surface the scene reader found keeps its own plane */
     const k=Math.max(0,Math.min(scan.times.length-1,Math.round(((pick.time??sceneTime)-result.from)*result.fps))),click:[number,number]=[pick.currentX*result.w,pick.currentY*result.h];
     const ctl=new AbortController();setSurface({for:pick,state:'working'});
-    findSurface(scan,k,click,globalTrack&&(globalTrack as any).frames?.length===scan.times.length?globalTrack:null,ctl.signal,facing).then(data=>{if(ctl.signal.aborted)return;setSurface({for:pick,state:'ready',data});
-      if(!data.chosen)setChoices({for:pick,list:data.alternatives?.length?[data.tilted?data.normal:null,...data.alternatives]:[]});}).catch(()=>{if(!ctl.signal.aborted)setSurface({for:pick,state:'none'});});
+    const spot=pickSpot.current!=null?facings.get(pickSpot.current):undefined,start=facing??(spot?.tilted?spot.normal:null);
+    findSurface(scan,k,click,globalTrack&&(globalTrack as any).frames?.length===scan.times.length?globalTrack:null,ctl.signal,start).then(data=>{if(ctl.signal.aborted)return;setSurface({for:pick,state:'ready',data});
+      if(!facing){const from=data.chosen&&spot?spot:data;setChoices({for:pick,list:from.alternatives?.length?[from.tilted?from.normal:null,...from.alternatives]:[]});}}).catch(()=>{if(!ctl.signal.aborted)setSurface({for:pick,state:'none'});});
     return()=>ctl.abort();
   },[pick,scan,result?.id,!!globalTrack,onSubject,facing]); // eslint-disable-line react-hooks/exhaustive-deps
   /* people who walk across the chosen spot: only they, and only then, get precise (SAM 2) masks, on request */
   const [matteMeta,setMatteMeta]=React.useState<any>(null);
   React.useEffect(()=>{setMatteMeta(null);if(!result?.matte)return;let live=true;void fetch(`${folder}${result.matte}`,{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{if(live)setMatteMeta(v);}).catch(()=>{});return()=>{live=false;};},[folder,result?.matte]);
+  const adjusted=React.useMemo(()=>{
+    if(surface?.state!=='ready'||!surface.data||surface.for!==pick||!pick||!result)return null;const S=surface.data;if(adj===ADJ0)return S;
+    const click:[number,number]=[(pick.currentX??.5)*result.w,(pick.currentY??.5)*result.h];
+    if(S.tilted&&S.normal){const n=turnTilt(S.normal,adj.turn*Math.PI/180,adj.tilt*Math.PI/180);return {...S,normal:n,quad:orientedQuad(click,n,intrinsics(result.w,result.h),{width:.4*adj.size,offset:[adj.along,adj.up],out:adj.out,spin:adj.spin*Math.PI/180}) as [number,number][]};}
+    const c=S.quad.reduce((a,p)=>[a[0]+p[0]/4,a[1]+p[1]/4],[0,0]),W=Math.hypot(S.quad[1][0]-S.quad[0][0],S.quad[1][1]-S.quad[0][1]),r=adj.spin*Math.PI/180,cs=Math.cos(r),sn=Math.sin(r);
+    return {...S,quad:S.quad.map(([x,y])=>{const dx=(x-c[0])*adj.size,dy=(y-c[1])*adj.size;return [c[0]+dx*cs-dy*sn+adj.along*W,c[1]+dx*sn+dy*cs-adj.up*W] as [number,number];})};
+  },[surface,pick,adj,result?.w,result?.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* where that plane is at the playhead, on the stage: the text's place and tilt before it is added */
+  const focusPlane=React.useMemo(()=>{if(!adjusted||!result||!rect)return null;const fr=adjusted.result.frames,i=Math.max(0,Math.min(fr.length-1,Math.round((sceneTime-result.from)*result.fps))),H=fr[i]?.H;if(!H)return null;
+    return adjusted.quad.map(p=>{const q=apply(H,p);return [rect.x+q[0]/result.w*rect.w,rect.y+q[1]/result.h*rect.h] as [number,number];});},[adjusted,sceneTime,result?.id,rect]); // eslint-disable-line react-hooks/exhaustive-deps
   /* people in the shot, from the masks themselves (a scan saved before specks were told apart says so from its own flag) */
   const peopleSeen=matteMeta?.frames?(matteMeta.frames as any[]).some(fr=>(fr?.subjects??[]).some((x:any)=>x?.box&&x.box[3]-x.box[1]>=.08*(matteMeta.trackH??result?.h??320))):!!result?.subjectsSeen;
   const crossing=React.useMemo(()=>{
@@ -217,10 +248,16 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     window.addEventListener('keydown',cancel);
     return()=>{delete document.body.dataset.sceneSelection;window.removeEventListener('keydown',cancel);};
   },[tool,picking,footageVisible,result?.spatial,sceneTracks]);
-  const spotMarkers=footageVisible&&result?spots.flatMap((sp,i)=>{const z=sceneH[6]*sp.x+sceneH[7]*sp.y+sceneH[8];if(!(z>.05))return [];const q=apply(sceneH,[sp.x,sp.y]);if(q[0]<result.w*.03||q[1]<result.h*.03||q[0]>result.w*.97||q[1]>result.h*.97)return [];const x=rect.x+q[0]/result.w*rect.w,y=rect.y+q[1]/result.h*rect.h,r=rect.w*.018;return [{id:`spot-${i}`,title:'Follow this',x,y,quad:[[x,y-r],[x+r,y],[x,y+r],[x-r,y]] as [number,number][]}];}):[];
+  const spotMarkers=footageVisible&&result?spots.flatMap((sp,i)=>{const z=sceneH[6]*sp.x+sceneH[7]*sp.y+sceneH[8];if(!(z>.05))return [];const q=apply(sceneH,[sp.x,sp.y]);if(q[0]<result.w*.03||q[1]<result.h*.03||q[0]>result.w*.97||q[1]>result.h*.97)return [];const x=rect.x+q[0]/result.w*rect.w,y=rect.y+q[1]/result.h*rect.h,r=rect.w*.018,fc=facings.get(i);
+    const toStage=(p:number[]):[number,number]=>[rect.x+p[0]/result.w*rect.w,rect.y+p[1]/result.h*rect.h];
+    const plane=fc?.tilted&&fc.normal?(orientedQuad(q,fc.normal,intrinsics(result.w,result.h),{width:.15}) as number[][]).map(toStage):[[x-r*1.6,y-r],[x+r*1.6,y-r],[x+r*1.6,y+r],[x-r*1.6,y+r]] as [number,number][];
+    return [{id:`spot-${i}`,title:fc?.tilted?'Text lies on this surface':'Follow this',x,y,quad:[[x,y-r],[x+r,y],[x,y+r],[x-r,y]] as [number,number][],plane}];}):[];
   const planeMarkers=footageVisible&&result?(result.spatial&&sceneTracks[result.spatial]?spatialSurfaceMarkers(sceneTracks[result.spatial],result.scene,sceneTime,result.w,result.h):visibleSurfaceMarkers(result.scene,result.planes,sceneTracks,sceneTime,result.w,result.h,sceneH)).map((s:{id:string;title:string;point:number[];quad:number[][]})=>({id:s.id,title:s.title,x:rect.x+s.point[0]/result.w*rect.w,y:rect.y+s.point[1]/result.h*rect.h,quad:s.quad.map((p:number[])=>[rect.x+p[0]/result.w*rect.w,rect.y+p[1]/result.h*rect.h] as [number,number])})):[];
 
   const surfaceMarkers=planeMarkers.length?planeMarkers:spotMarkers;
+  /* Cancel stops what is on screen at once (the ripple, the timeline's sweep, the progress), not when the scan's current
+     step next looks at its signal */
+  const cancelScan = () => { abort.current?.abort(); abort.current = null; setProgress(null); setSeen(null); notify('Scan cancelled.'); };
   const analyse = () => {
     if (!f || progress || !size) return; const ctl = new AbortController(); abort.current = ctl; const { from, to } = srcRange();
     setProgress({ share: 0, msg: 'Starting' }); setSeen(null);
@@ -236,7 +273,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   const addTrack = (template: string, mode: EffectMode = 'textBehind') => run(async () => {
     if (!f || !result) throw new Error('Scan the footage first.');
     /* a location title sits on a wall up to the left, as the games project it; the rest stand where the subject is */
-    const S = surface?.state === 'ready' && surface.for === pick && pick && mode === 'textBehind' ? surface.data! : null;
+    const S = surface?.state === 'ready' && surface.for === pick && pick && mode === 'textBehind' ? (adjusted ?? surface.data)! : null;
     let sceneForItem = result.scene, planesForItem = result.planes;
     if (S && pick) {
       const name = 'Surface at click', path = await putFile(projectId, `assets/track/${result.id}-click-${Date.now().toString(36)}.json`, JSON.stringify(S.result));
@@ -244,7 +281,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
       planesForItem = [...(result.planes ?? []), { name, track: path, quality: S.result.quality, lostShare: S.result.lostShare }];
     }
     const C = result.content ?? { x: 0, y: 0, w: 1, h: 1 };
-    const anchor: [number, number] = S && pick ? [pick.currentX! * result.w, pick.currentY! * result.h] : [result.w * (pick?.x ?? C.x + C.w * .5), result.h * (pick?.y ?? C.y + C.h * (template === 'location' ? .4 : .76))];
+    const anchor: [number, number] = S && pick && adj !== ADJ0 ? S.quad.reduce((a, p) => [a[0] + p[0] / 4, a[1] + p[1] / 4], [0, 0]) as [number, number] : S && pick ? [pick.currentX! * result.w, pick.currentY! * result.h] : [result.w * (pick?.x ?? C.x + C.w * .5), result.h * (pick?.y ?? C.y + C.h * (template === 'location' ? .4 : .76))];
     const items = mode === 'textBehind' ? [spatialItem(sceneItem({...fitItem(itemFor(template, text, anchor, result.h), C, result.w, result.h),anchor,sceneDepth,anim:'rise',in:.45,animOut:'fade',out:.3},sceneForItem,result.w,result.h,'auto',planesForItem),result.spatial?sceneTracks[result.spatial]:null,pick?.time??sceneTime,result.w,result.h,pick?.currentX!=null&&result.spatial&&sceneTracks[result.spatial]?[pick.currentX*sceneTracks[result.spatial].width,pick.currentY!*sceneTracks[result.spatial].height]:undefined)] : [];
     /* white words on a white wall cannot be read: over a light patch of the picture the text goes dark, with a light edge */
     if(scan&&items[0]&&mode==='textBehind'&&/^#f{3,6}$/i.test(String(items[0].color??''))){const k=Math.max(0,Math.min(scan.grays.length-1,Math.round(((pick?.time??sceneTime)-result.from)*result.fps))),g=scan.grays[k],[ax,ay]=anchor,r=Math.max(4,Math.round(result.w*.05));let sum=0,n=0;for(let y=Math.max(0,Math.round(ay-r));y<Math.min(scan.h,ay+r);y++)for(let x=Math.max(0,Math.round(ax-r*2));x<Math.min(scan.w,ax+r*2);x++){sum+=g[y*scan.w+x];n++;}if(n&&sum/n>170)Object.assign(items[0],{color:'#15171c',strokeColor:'rgba(255,255,255,0.6)'});}
@@ -354,7 +391,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                   <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text)]">{f.clip.src.split('#')[0].split('/').pop()}</span><span className="text-[10.5px] text-[var(--text-faint)]">{isPhoto ? 'photo' : 'from the playhead'}</span></div>
                 <p className={T.hint}>{progress?'Scanning camera motion, surfaces and people…':result?'Click a diamond to place text in the scene.':'Scanning starts automatically.'}</p>
                 
-                {progress ? <ScanProgress share={progress.share} msg={progress.msg} seen={seen} onCancel={() => abort.current?.abort()} />
+                {progress ? <ScanProgress share={progress.share} msg={progress.msg} seen={seen} onCancel={cancelScan} />
                   : <button type="button" disabled={!size} onClick={analyse} className={`${result?T.secondary:T.primary} h-9`}><ScanLine size={14} />{result ? 'Scan again' : isPhoto ? 'Scan photo' : 'Scan footage'}</button>}
                 {!progress && result ? <p className="text-[11px] text-[var(--text-muted)]">Camera motion <b className="font-semibold text-[var(--text)]">{result.quality}</b> · {result.medianError} px{result.occlusion ? ' · precise people masks' : result.matte ? ' · foreground ready' : ''}</p> : null}
                 {!progress && result && !result.spatial && !isPhoto && !pick && (result.walking || peopleSeen) && <div className="flex flex-col gap-1.5 rounded-lg bg-[var(--fill-tsp)] p-2.5">
@@ -373,7 +410,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
           {placementPreview&&result?.spatial&&sceneTracks[result.spatial]&&<SpatialPlacementPreview projectId={projectId} folder={folder} solution={sceneTracks[result.spatial]} item={placementPreview} time={sceneTime} sourceRect={rect}/>}
           {result?.spatial&&sceneTracks[result.spatial]&&<More title="Inspect the scene"><SpatialPreview projectId={projectId} folder={folder} solution={sceneTracks[result.spatial]} time={sceneTime} sourceRect={rect} onMode={mode=>{setPicking(mode!=='inspect'&&!pick);}} onPoint={(sx,sy)=>setPick(toFootage(sx,sy))} onWorldPoint={(point,normal)=>{try{const solution=sceneTracks[result.spatial!],anchor=anchorFromGeometry(solution,Math.round(sceneTime*1e6),point,normal);setPick({x:.5,y:.5,time:sceneTime,spatialAnchor:anchor});setAmbiguous(false);notify('Selected a reconstructed surface.');}catch(e){notify((e as Error).message);}}}/></More>}
           {(result.matte||result.occlusion)&&footageVisible&&<ForegroundOutline folder={folder} occlusionPath={result.occlusion} mattePath={result.matte} time={sceneTime} sourceRect={rect}/>}
-          <StageOverlay pick={picking&&footageVisible&&(!result.spatial||!!sceneTracks[result.spatial])} pickBounds={rect} surfaces={surfaceMarkers} hint="Choose a diamond or click a surface" onCancel={()=>setPicking(false)} onPick={(x0, y0) => {const [sx,sy]=snap(x0,y0),next=toFootage(sx,sy);setPick(next);setPicking(false);}} nodes={selectedPoint&&!progress&&footageVisible ? [{ id: 'place', ...selectedPoint, label: '1', active: true }] : []} onDrop={(_, x0, y0) => {if(x0<rect.x||y0<rect.y||x0>rect.x+rect.w||y0>rect.y+rect.h)return;const [sx,sy]=snap(x0,y0),next=toFootage(sx,sy);setPick(next);setPicking(false);}} />
+          <StageOverlay pick={picking&&footageVisible&&(!result.spatial||!!sceneTracks[result.spatial])} showSurfaces={footageVisible&&!progress&&(!result.spatial||!!sceneTracks[result.spatial])} focus={footageVisible&&!progress?focusPlane:null} pickBounds={rect} surfaces={surfaceMarkers} hint="Choose a diamond or click a surface" onCancel={()=>setPicking(false)} onPick={(x0, y0) => {const [sx,sy]=snap(x0,y0),m=surfaceMarkers.find((mk:{id:string;x:number;y:number})=>mk.x===sx&&mk.y===sy);pickSpot.current=m?.id.startsWith('spot-')?Number(m.id.slice(5)):null;const next=toFootage(sx,sy);setPick(next);setPicking(false);}} nodes={selectedPoint&&!progress&&footageVisible ? [{ id: 'place', ...selectedPoint, label: '1', active: true }] : []} onDrop={(_, x0, y0) => {if(x0<rect.x||y0<rect.y||x0>rect.x+rect.w||y0>rect.y+rect.h)return;const [sx,sy]=snap(x0,y0),next=toFootage(sx,sy);setPick(next);setPicking(false);}} />
                   {pick&&<div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3" style={{ animation: 'mg-in .22s cubic-bezier(.22,1,.36,1) both' }}>
                     <input aria-label="Text" placeholder="Your text" value={text} onChange={(e) => setText(e.target.value)} className={`${T.small} w-full`} />
                     {pick.spatialAnchor?.edgeOnSurface&&<p className={T.hint}>The surface here is seen almost edge-on, so the text stands at its depth facing the camera.</p>}
@@ -381,7 +418,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                     {onSubject&&(result.matte||result.occlusion)&&<div className="flex flex-col gap-1"><p className="text-[12px] font-medium text-[var(--text)]">That's something the scan found. Where should the text go?</p><div className={segWrap} role="group" aria-label="Order with the detected subject">{(['behind','front'] as const).map(m=><button key={m} type="button" aria-pressed={foreground===m} className={seg(foreground===m)} onClick={()=>setForeground(m)}>{m==='front'?'In front of it':'Behind it'}</button>)}</div></div>}
                     {crossing&&!preciseCovers(result,crossing)&&<div className="flex flex-col gap-1.5 rounded-lg bg-[var(--fill-tsp)] p-2.5">
                       <p className="text-[11.5px] text-[var(--text-dim)]">{crossing.instances.length===1?'Someone walks':'People walk'} across this spot ({crossing.from.toFixed(1)}–{crossing.to.toFixed(1)}s).</p>
-                      {precise?<ScanProgress share={precise.share} msg={precise.msg} seen={null} onCancel={()=>preciseAbort.current?.abort()}/>:<button type="button" onClick={makePrecise} className={T.secondary}>Make their edges precise</button>}
+                      {precise?<ScanProgress share={precise.share} msg={precise.msg} seen={null} onCancel={()=>{preciseAbort.current?.abort();preciseAbort.current=null;setPrecise(null);}}/>:<button type="button" onClick={makePrecise} className={T.secondary}>Make their edges precise</button>}
                       {!precise&&<p className={T.hint}>Follows {crossing.instances.length===1?'that person':'them'} with SAM 2 on this computer, about {preciseMinutes(crossing)} min on a laptop CPU (measured: 11 min for 4 s with two people). You can keep editing.</p>}
                     </div>}
                     {preciseCovers(result,crossing)&&<p className={T.hint}>Precise people masks are on for this spot.</p>}
@@ -389,6 +426,10 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                       <p className={T.hint}>{facing?'Using your pick.':'Not sure which way this faces. Which is it?'}</p>
                       <div className={segWrap} role="group" aria-label="Which way the surface faces">{choices.list.map((n,i)=>{const on=facing?(!!n&&n.every((v,j)=>Math.abs(v-facing[j])<1e-6)):i===0;return <button key={i} type="button" aria-pressed={on} disabled={surface?.state==='working'} className={`${seg(on)} flex items-center justify-center gap-1.5`} onClick={()=>setFacing(i===0?null:n)}><FacingShape normal={n} click={[(pick.currentX??.5)*result.w,(pick.currentY??.5)*result.h]} w={result.w} h={result.h}/>{facingName(n)}</button>;})}</div>
                     </div>}
+                    {!result.spatial&&adjusted&&<More title="Adjust position">
+                      {ADJUST_ROWS.map(([key,label,min,max,step])=><label key={key} className="flex items-center gap-2 text-[11px] text-[var(--text-dim)]"><span className="w-[74px] shrink-0">{label}</span><input type="range" aria-label={label} min={min} max={max} step={step} value={adj[key]} onChange={e=>{const v=Number(e.target.value);setAdj(a=>({...a,[key]:v}));}} onDoubleClick={()=>setAdj(a=>({...a,[key]:ADJ0[key]}))} className="min-w-0 flex-1 accent-[var(--accent)]"/></label>)}
+                      {adj!==ADJ0&&<button type="button" onClick={()=>setAdj(ADJ0)} className="self-start text-[11px] font-medium text-[var(--accent)]">Reset</button>}
+                    </More>}
                     {!result.spatial&&surface&&<p className={T.hint} role="status">{surface.state==='working'?'Reading the surface…':surface.state==='ready'&&surface.data?.tilted?'The text will lie on this surface, tilted with it.':'The text will follow this surface.'}</p>}
                     <button type="button" disabled={busy||surface?.state==='working'||!!result.spatial&&!pick.spatialAnchor} onClick={()=>void addTrack('surface')} className={T.primary}><Plus size={13}/>{busy?'Adding text…':'Add text'}</button>
                   </div>}

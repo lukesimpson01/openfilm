@@ -103,17 +103,18 @@ export function ChatPanel({ open, onClose, projectId, folder, film, edit, timeMs
     const reply: Msg = { id: uid(), role: 'assistant', text: '', rows: [] };
     setMsgs((m) => [...m, { id: uid(), role: 'user', text: t }, reply]);
     const patch = (fn: (m: Msg) => Msg) => setMsgs((all) => all.map((m) => (m.id === reply.id ? fn(m) : m)));
-    setBusy(true); abort.current = new AbortController();
+    setBusy(true); const ctl = new AbortController(); abort.current = ctl; stopRun.current = () => patch(m=>({...m,rows:m.rows?.map(r=>r.state==='running'?{...r,state:'failed',result:{ok:false,message:'Stopped before this action completed.'}}:r)}));
     try {
       /* each edit is waited on until the film shows it, so the next action reads the timeline as it now is */
       const settled = async (ops: Op[], label: string) => {
+        if (ctl.signal.aborted) return 'Stopped.'; /* a stopped request changes nothing more */
         const before = film(); const fail = await edit(ops, label);
         for (let i = 0; !fail && i < 40 && film() === before; i++) await new Promise((r) => setTimeout(r, 25));
         return fail;
       };
       await runAgent(history, t, {
         projectId, folder, film, edit: settled, timeMs: timeMs ?? (() => 0), seek: seek ?? (() => {}), select: select ?? (() => {}), nameLine: nameLine ?? (() => {}),
-        progress: () => {}, signal: abort.current.signal,
+        progress: () => {}, signal: ctl.signal,
       }, {
         text: (shown) => patch((m) => ({ ...m, text: shown })),
         plan: (steps) => patch((m) => ({ ...m, plan: steps })),
@@ -143,8 +144,13 @@ export function ChatPanel({ open, onClose, projectId, folder, film, edit, timeMs
       });
     } catch (e) {
       if ((e as Error)?.name !== 'AbortError') patch((m) => ({ ...m, text: `${m.text ? `${m.text}\n\n` : ''}${e instanceof Error ? e.message : String(e)}` }));
-    } finally { setBusy(false); setPhase(null);setScanSource(undefined);patch(m=>({...m,rows:m.rows?.map(r=>r.state==='running'?{...r,state:'failed',result:{ok:false,message:'Stopped before this action completed.'}}:r)})); abort.current = null; }
+    } finally { if (abort.current === ctl) settle(); }
   };
+  /* Stop ends the request on screen at once (the timeline's shimmer, the phase, running rows), not when the work it
+     was waiting on happens to notice */
+  const stopRun = React.useRef<(() => void) | null>(null);
+  const settle = () => { setBusy(false); setPhase(null); setScanSource(undefined); stopRun.current?.(); stopRun.current = null; abort.current = null; };
+  const stop = () => { abort.current?.abort(); settle(); };
   const attach = async (f: File) => {
     const path = `assets/${f.name.replace(/[^\w.-]+/g, '-')}`;
     const r = await fetch(`/api/projects/${projectId}/files?path=${encodeURIComponent(path)}`, { method: 'PUT', body: f });
@@ -218,7 +224,7 @@ export function ChatPanel({ open, onClose, projectId, folder, film, edit, timeMs
             <button type="button" onClick={() => fileInput.current?.click()} aria-label="Attach a video or photo" title="Attach a video or photo" className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-dim)] transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"><Paperclip size={14} /></button>
             <input ref={fileInput} type="file" accept="video/*,image/*,.fbx,.glb,.gltf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void attach(f); e.target.value = ''; }} />
             {busy ? (
-              <button type="button" onClick={() => abort.current?.abort()} aria-label="Stop" className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--text)] text-[var(--bg)]"><Square size={11} fill="currentColor" /></button>
+              <button type="button" onClick={stop} aria-label="Stop" className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--text)] text-[var(--bg)]"><Square size={11} fill="currentColor" /></button>
             ) : (
               <button type="button" onClick={() => void send(draft)} disabled={!draft.trim()} aria-label="Send" className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--accent)] text-white transition disabled:opacity-30"><ArrowUp size={14} /></button>
             )}

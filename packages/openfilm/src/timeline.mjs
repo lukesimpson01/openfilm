@@ -1001,12 +1001,9 @@ async function drawClip(c, t, live, play, turn, coming, going) {
   const local = sourceAt(c.span, t - c.at, c.row, c.native);
   c.win.filmHost?.time?.(local);
   /* a page's error says which clip and which of its own seconds, not only the film's t */
-  const __t0 = performance.now();
   try { await c.child.frame(local); }
   catch (e) { throw new Error(`clip "${c.id}" (${c.src}) at its ${Number(local.toFixed(3))}s: ${e?.message ?? e}`); }
   c.win.filmHost?.settle?.(local);
-  { const P = (window.__prof ??= { n: {}, ms: {}, max: {}, at: performance.now() }); if (!window.__profHello) { window.__profHello = 1; window.top.postMessage({ filmprof: { hello: location.href } }, '*'); } const k = String(c.src).split('/').pop(); const d = performance.now() - __t0; P.n[k] = (P.n[k] || 0) + 1; P.ms[k] = (P.ms[k] || 0) + d; P.max[k] = Math.max(P.max[k] || 0, d);
-    if (performance.now() - P.at > 2500) { window.top.postMessage({ filmprof: (Object.fromEntries(Object.keys(P.n).map((q) => [q, `${P.n[q]}x avg ${(P.ms[q] / P.n[q]).toFixed(1)}ms max ${P.max[q].toFixed(0)}`]))) }, '*'); window.__prof = null; } }
   if (!live) await mediaShown(c.win.document);
   c.drawn = true;
   override(c, c.preview ?? c.overrides);

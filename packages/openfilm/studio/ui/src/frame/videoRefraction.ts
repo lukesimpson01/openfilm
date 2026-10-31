@@ -35,9 +35,11 @@ export function createVideoRefraction(video: HTMLVideoElement, amplitudePx = 12,
     // refreshes, rather than waiting for much larger stalls before adapting.
     if(previous){const dt=Math.max(0,t-previous);elapsed+=dt;samples++;if(dt>25)late++;}
     previous=t;
-    if(samples>=60){if(late/samples>.2){quality*=.75;if(quality<.3){quality=0;canvas.style.display='none';video.dataset.scanEffect='reduced';cancelAnimationFrame(raf);return;}resize();}samples=late=0;}
-    if(video.readyState<2)return;
-    const stamp=video.getVideoPlaybackQuality?.().totalVideoFrames??Math.floor(video.currentTime*30);if(textureDirty||!video.requestVideoFrameCallback&&lastVideo!==stamp){try{const k=Math.min(1,720/Math.max(video.videoWidth,video.videoHeight));const w=Math.max(2,Math.round(video.videoWidth*k)),h=Math.max(2,Math.round(video.videoHeight*k));if(upload.width!==w||upload.height!==h){upload.width=w;upload.height=h;}if(uploadContext){uploadContext.drawImage(video,0,0,w,h);gl!.texImage2D(gl!.TEXTURE_2D,0,gl!.RGBA,gl!.RGBA,gl!.UNSIGNED_BYTE,upload);}else gl!.texImage2D(gl!.TEXTURE_2D,0,gl!.RGBA,gl!.RGBA,gl!.UNSIGNED_BYTE,video);lastVideo=stamp;textureDirty=false;}catch{canvas.style.display='none';return;}}
+    /* late frames while a scan works the main thread: draw smaller, never stop (a frozen or vanished ripple reads as a
+       hang); the smallest size is cheap, and the lateness is the scan's, not this pass's */
+    if(samples>=60){if(late/samples>.2&&quality>.35){quality=Math.max(.35,quality*.75);video.dataset.scanEffect=quality<=.35?'reduced':'';resize();}samples=late=0;}
+    /* a video still buffering keeps its last picture under moving water rather than freezing it */
+    const stamp=video.readyState<2?lastVideo:video.getVideoPlaybackQuality?.().totalVideoFrames??Math.floor(video.currentTime*30);if(video.readyState>=2&&(textureDirty||!video.requestVideoFrameCallback&&lastVideo!==stamp)){try{const k=Math.min(1,720/Math.max(video.videoWidth,video.videoHeight));const w=Math.max(2,Math.round(video.videoWidth*k)),h=Math.max(2,Math.round(video.videoHeight*k));if(upload.width!==w||upload.height!==h){upload.width=w;upload.height=h;}if(uploadContext){uploadContext.drawImage(video,0,0,w,h);gl!.texImage2D(gl!.TEXTURE_2D,0,gl!.RGBA,gl!.RGBA,gl!.UNSIGNED_BYTE,upload);}else gl!.texImage2D(gl!.TEXTURE_2D,0,gl!.RGBA,gl!.RGBA,gl!.UNSIGNED_BYTE,video);lastVideo=stamp;textureDirty=false;}catch{canvas.style.display='none';return;}}
     const found=subjects?.(video.currentTime)??[];const n=Math.min(8,found.length);for(let i=0;i<n;i++)packed.set(found[i],i*4);gl!.uniform4fv(boxesAt,packed);gl!.uniform1i(boxCount,n);
     gl!.uniform1f(clock,elapsed/1000);gl!.drawArrays(gl!.TRIANGLE_STRIP,0,4);
   }

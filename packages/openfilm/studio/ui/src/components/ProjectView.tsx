@@ -465,8 +465,13 @@ export function ProjectView({ projectId, onProject, onLeave }: {
     return () => cancelAnimationFrame(frame);
   }, [playing]);
 
+  /* a seek asked for past the film's end as it was (the end of a clip just put on): made once the film is that long */
+  const seekWhenLonger = React.useRef<number | null>(null);
   const seek = React.useCallback((ms: number) => {
     const t = Math.max(0, Math.min(ms / 1000, player.current.duration || ms / 1000));
+    /* asked before the film has loaded (its length still 0): made again once it has, or the picture would stay on the
+       first frame while the timeline and the tools work at t */
+    if (!(player.current.duration > 0) && t > 0) seekWhenLonger.current = t * 1000;
     /* playing, it plays on from there (the preview is told the player's new line); still, the picture shows t */
     player.current.seek(t);
     setTimeMs(t * 1000);
@@ -598,8 +603,6 @@ export function ProjectView({ projectId, onProject, onLeave }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* a seek asked for past the film's end as it was (the end of a clip just put on): made once the film is that long */
-  const seekWhenLonger = React.useRef<number | null>(null);
   const onInfo = React.useCallback((next: FilmInfo) => {
     setInfo(next);
     if (loaded) player.current.load(new URL(loaded.folder).origin, next.sounds, next.duration);

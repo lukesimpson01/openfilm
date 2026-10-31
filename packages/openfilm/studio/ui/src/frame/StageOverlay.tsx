@@ -7,7 +7,25 @@ import { createVideoRefraction } from './videoRefraction';
    points, tracking points, a click to pick a point or a subject. Coordinates are 0…1 of the stage (x right, y down),
    so they follow any zoom or resize of the preview. Nothing here is in the video: it is only shown while editing. */
 export type OverlayNode = { id: string; x: number; y: number; label?: string; active?: boolean };
-export type SurfaceMarker={id:string;x:number;y:number;quad:[number,number][];title:string};
+/** a diamond on a surface: its point, and (plane) the surface around it as the camera sees it, 0…1 of the stage */
+export type SurfaceMarker={id:string;x:number;y:number;quad:[number,number][];title:string;plane?:[number,number][]};
+/** the unit square onto a quad (TL TR BR BL), as a homography: grid lines and the gem drawn in the surface's own tilt */
+function squareTo(q:[number,number][]){const [[x0,y0],[x1,y1],[x2,y2],[x3,y3]]=q,dx1=x1-x2,dx2=x3-x2,dy1=y1-y2,dy2=y3-y2,sx=x0-x1+x2-x3,sy=y0-y1+y2-y3,den=dx1*dy2-dx2*dy1||1e-9,g=(sx*dy2-dx2*sy)/den,h=(dx1*sy-sx*dy1)/den;
+  const a=x1-x0+g*x1,b=x3-x0+h*x3,d=y1-y0+g*y1,e=y3-y0+h*y3;return (u:number,v:number):[number,number]=>{const z=g*u+h*v+1;return [(a*u+b*v+x0)/z,(d*u+e*v+y0)/z];};}
+/** a surface drawn as a see-through plane with a light grid (the scene's wireframe) and a faceted gem standing on it */
+function PlaneMarker({quad,focus=false}:{quad:[number,number][];focus?:boolean}){
+  const M=squareTo(quad),pt=(u:number,v:number)=>M(u,v).join(','),line=(a:[number,number],b:[number,number],k:string)=><line key={k} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]}/>;
+  const grid=[1,2,3].flatMap(i=>[line(M(i/4,0),M(i/4,1),`u${i}`),line(M(0,i/4),M(1,i/4),`v${i}`)]);
+  const c=M(.5,.5),d=.16,top=M(.5,.5-d*1.25),right=M(.5+d,.5),bottom=M(.5,.5+d*1.25),left=M(.5-d,.5),peak:[number,number]=[c[0],c[1]-Math.max(2,Math.hypot(top[0]-c[0],top[1]-c[1])*.35)];
+  const tri=(a:[number,number],b:[number,number],fill:string,k:string)=><polygon key={k} points={[a,b,peak].map(p=>p.join(',')).join(' ')} fill={fill}/>;
+  const tone=focus?['#ffe08a','#f8c537','#d99a0b','#eab308']:['#c7d4ff','#7d97f7','#3f5bd6','#5a76ea'];
+  return <g style={{filter:'drop-shadow(0 1px 2px rgba(0,0,0,.45))'}}>
+    <polygon points={[pt(0,0),pt(1,0),pt(1,1),pt(0,1)].join(' ')} fill={focus?'rgba(250,204,21,.16)':'rgba(69,104,238,.10)'} stroke={focus?'#facc15':'rgba(120,150,255,.75)'} strokeWidth={focus?1.6:1}/>
+    <g stroke={focus?'rgba(250,204,21,.45)':'rgba(160,185,255,.35)'} strokeWidth={.8}>{grid}</g>
+    {tri(top,right,tone[0],'a')}{tri(right,bottom,tone[1],'b')}{tri(bottom,left,tone[2],'c')}{tri(left,top,tone[3],'d')}
+    <polygon points={[top,right,bottom,left].map(p=>p.join(',')).join(' ')} fill="none" stroke="white" strokeWidth={1.1} strokeLinejoin="round"/>
+  </g>;
+}
 export type StageRect=DOMRect&{clip:{left:number;top:number;width:number;height:number}};
 export function stageClipStyle(rect:StageRect){const c=rect.clip;return{clipPath:`inset(${Math.max(0,c.top-rect.top)}px ${Math.max(0,rect.right-c.left-c.width)}px ${Math.max(0,rect.bottom-c.top-c.height)}px ${Math.max(0,c.left-rect.left)}px)`};}
 export function useStageRect() {
@@ -21,7 +39,9 @@ export function useStageRect() {
   return rect;
 }
 
-export function StageOverlay({ nodes = [], surfaces=[], path, target, points, pick, pickBounds, onPick, onCancel, onMove, onDrop, hint, box }: {
+export function StageOverlay({ nodes = [], surfaces=[], showSurfaces=false, focus=null, path, target, points, pick, pickBounds, onPick, onCancel, onMove, onDrop, hint, box }: {
+  /** the diamonds stay on the picture outside pick mode too (a click on one picks it); focus: the chosen spot's plane */
+  showSurfaces?: boolean; focus?: [number, number][] | null;
   nodes?: OverlayNode[]; path?: [number, number][]; target?: { x: number; y: number; zoom?: number } | null; points?: [number, number][];
   surfaces?:SurfaceMarker[];
   /** pick mode: the next click on the picture is a point (crosshair cursor) */
@@ -48,7 +68,8 @@ export function StageOverlay({ nodes = [], surfaces=[], path, target, points, pi
         <g clipPath={`url(#${clipId})`}>
         {line && (path || shown.length > 1) ? <polyline points={line} fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth={1.5} strokeDasharray="5 4" style={{ filter: 'drop-shadow(0 0 2px rgba(0,0,0,.8))' }} /> : null}
         {(points ?? []).map(([x, y], i) => { const [a, b] = P(x, y); return <circle key={i} cx={a} cy={b} r={2.2} fill="#4ade80" stroke="rgba(0,0,0,.6)" strokeWidth={0.8} />; })}
-        {pick&&<g clipPath={`url(#${clipId}-pick)`}>{visibleSurfaces.map((s,i)=>{const [x,y]=P(s.x,s.y);return <g key={s.id} className="scene-surface-marker" style={{animationDelay:`${i*22}ms`}}><polygon points={s.quad.map(p=>P(...p).join(',')).join(' ')} fill="rgba(69,104,238,.17)" stroke="#4568ee" strokeWidth="1.4"/><rect x={x-3.5} y={y-3.5} width="7" height="7" rx="1" transform={`rotate(45 ${x} ${y})`} fill="#4568ee" stroke="white" strokeWidth="1.2"/></g>;})}</g>}
+        {(pick||showSurfaces)&&<g clipPath={`url(#${clipId}-pick)`}>{visibleSurfaces.map((s,i)=><g key={s.id} className="scene-surface-marker" style={{animationDelay:`${i*22}ms`,opacity:pick?1:.85}}><PlaneMarker quad={(s.plane??s.quad).map(p=>[...P(...p)] as [number,number])}/></g>)}
+          {focus&&focus.every(p=>p.every(Number.isFinite))?<PlaneMarker focus quad={focus.map(p=>[...P(...p)] as [number,number])}/>:null}</g>}
         {box ? (() => { const [a, b] = P(box[0], box[1]); const [c, d] = P(box[2], box[3]); return <rect x={a} y={b} width={c - a} height={d - b} fill="rgba(69,104,238,.12)" stroke="#4568ee" strokeWidth={1.5} strokeDasharray="4 3" />; })() : null}
         {target ? (() => { const [a, b] = P(target.x, target.y); const z = target.zoom ?? 1; const w = rect.width / z, h = rect.height / z; return (
           <g><rect x={a - w / 2} y={b - h / 2} width={w} height={h} fill="none" stroke="#fbbf24" strokeWidth={1.5} strokeDasharray="6 4" /><line x1={a - 10} y1={b} x2={a + 10} y2={b} stroke="#fbbf24" strokeWidth={2} /><line x1={a} y1={b - 10} x2={a} y2={b + 10} stroke="#fbbf24" strokeWidth={2} /></g>); })() : null}
@@ -61,7 +82,7 @@ export function StageOverlay({ nodes = [], surfaces=[], path, target, points, pi
         </div>
       ) : null}
       {pick && onCancel && bounds.right > bounds.left && bounds.bottom > bounds.top && <button type="button" onClick={onCancel} className="fixed z-[41] rounded-md bg-black/75 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" style={{left:bounds.left+8,top:bounds.bottom-36}}>Cancel</button>}
-      {pick&&visibleSurfaces.map(s=>{const [x,y]=P(s.x,s.y),clip=`inset(${Math.max(0,bounds.top-y+14)}px ${Math.max(0,x+14-bounds.right)}px ${Math.max(0,y+14-bounds.bottom)}px ${Math.max(0,bounds.left-x+14)}px)`;return <button key={s.id} type="button" aria-label={`Place on ${s.title}`} title={s.title} className="fixed z-40 h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-md outline-none hover:ring-1 hover:ring-white focus-visible:ring-2 focus-visible:ring-white" style={{left:x,top:y,clipPath:clip}} onClick={()=>onPick?.(s.x,s.y)}/>;})}
+      {(pick||showSurfaces)&&visibleSurfaces.map(s=>{const [x,y]=P(s.x,s.y),clip=`inset(${Math.max(0,bounds.top-y+14)}px ${Math.max(0,x+14-bounds.right)}px ${Math.max(0,y+14-bounds.bottom)}px ${Math.max(0,bounds.left-x+14)}px)`;return <button key={s.id} type="button" aria-label={`Place on ${s.title}`} title={s.title} className="fixed z-40 h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-crosshair rounded-md outline-none hover:ring-1 hover:ring-white focus-visible:ring-2 focus-visible:ring-white" style={{left:x,top:y,clipPath:clip}} onClick={()=>onPick?.(s.x,s.y)}/>;})}
       {shown.map((n) => { const [a, b] = P(n.x, n.y); return (
         <button key={n.id} type="button" aria-label={n.label ? `Point ${n.label}` : 'Path point'} title={n.label}
           className={`fixed z-40 flex h-5 min-w-5 -translate-x-1/2 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-2 border-white px-1 text-[9px] font-bold text-white shadow-[0_2px_6px_rgba(0,0,0,.4)] ${n.active ? 'bg-[#fbbf24]' : 'bg-[var(--accent)]'}`}

@@ -43,12 +43,15 @@ export function createTransition(layer, root) {
   const renderer = new TransitionRenderer(canvas);
   const single = layer.kind === 'effect';
   const A = media(layer.aSrc), B = single ? A : media(layer.bSrc);
-  const ready = Promise.all([loaded(A), loaded(B)]);
   const duration = Math.max(0.05, layer.duration || 0.5);
   const curve = Array.isArray(layer.params?.curve) && layer.params.curve.length > 1 ? layer.params.curve : null;
-  return {
+  /* ready means ready to play through: both videos already at their first frames and that frame drawn, while the page
+     wakes ahead of the cut. Seeking them only once the cut is reached (mid-GOP, both at once) left a live preview
+     black for its first part, and the motion late */
+  const ready = Promise.all([loaded(A), loaded(B)]).then(() => run.frame(0)).catch(() => {});
+  const run = {
     duration,
-    ready,
+    get ready() { return ready; },
     async frame(t) {
       size();
       const tt = Math.min(Math.max(t, 0), duration);
@@ -81,4 +84,5 @@ export function createTransition(layer, root) {
       else renderer.render(A, B, p, { ...layer.params, id: layer.effect, duration, fps: layer.fps || 40, seed: layer.seed });
     },
   };
+  return run;
 }

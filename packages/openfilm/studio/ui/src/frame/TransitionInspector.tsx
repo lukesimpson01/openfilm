@@ -1,3 +1,4 @@
+import React from 'react';
 
 import { Play, Copy, Trash2, Diamond } from 'lucide-react';
 import type { Film, Op } from '@/api';
@@ -70,8 +71,7 @@ export function TransitionInspector({ layer, clipId, film, folder, projectId, co
 
       <label className={row}><span className="w-[72px]">Duration</span>
         <input type="range" min={0.1} max={max} step={0.1} value={Math.min(layer.duration, max)} onChange={(e) => setDuration(Number(e.target.value))} className={slider} />
-        <input type="number" min={0.1} max={max} step={0.1} value={Math.round(layer.duration * 10) / 10} onChange={(e) => setDuration(Number(e.target.value) || 0.1)}
-          className="h-7 w-14 rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 text-[12px] tabular-nums outline-none focus:border-[var(--accent)]" />
+        <SecondsField value={layer.duration} max={max} onCommit={setDuration} />
         <span className="text-[10.5px] text-[var(--text-faint)]">s</span>
       </label>
       <p className="-mt-2 pl-[80px] text-[10.5px] text-[var(--text-faint)]">Up to {max.toFixed(1)} s ({cut?.edge === 'cut' ? 'the shorter clip' : 'the clip'})</p>
@@ -186,4 +186,15 @@ function Slide({ label, value, onChange, min = 0, max = 1, step = 0.01 }: { labe
       <span className="w-9 text-right text-[11px] tabular-nums text-[var(--text-muted)]">{step >= 1 ? Math.round(value) : Number(value ?? 0).toFixed(2)}</span>
     </label>
   );
+}
+
+/** a length typed in seconds: what is typed stays as typed until Enter or leaving the field (each keystroke committing
+ *  would turn a cleared field into 0.1 s, and "2" typed after it into 0.12) */
+function SecondsField({ value, max, onCommit }: { value: number; max: number; onCommit: (seconds: number) => void }) {
+  const [draft, setDraft] = React.useState<string | null>(null);
+  const done = () => { if (draft == null) return; const n = Number(draft.replace(',', '.')); setDraft(null); if (Number.isFinite(n) && n > 0) onCommit(Math.min(max, Math.max(0.1, n))); };
+  return <input type="text" inputMode="decimal" aria-label="Duration in seconds" value={draft ?? String(Math.round(value * 10) / 10)}
+    onFocus={(e) => { setDraft(String(Math.round(value * 10) / 10)); e.currentTarget.select(); }} onChange={(e) => setDraft(e.target.value)} onBlur={done}
+    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); done(); (e.target as HTMLInputElement).blur(); } if (e.key === 'Escape') { setDraft(null); (e.target as HTMLInputElement).blur(); } }}
+    className="h-7 w-14 rounded-md border border-[var(--border)] bg-[var(--bg)] px-1.5 text-[12px] tabular-nums outline-none focus:border-[var(--accent)]" />;
 }
