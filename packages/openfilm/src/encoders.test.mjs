@@ -115,7 +115,9 @@ test('on a Mac with a ProRes engine, ProRes keeps half alpha; the chip\'s H.264 
       assert.ok(alpha.every((a) => Math.abs(a - 128) <= 2), `alpha ${alpha[0]}`);
     }
     const src = join(dir, 'srgb.mp4');
-    execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=0.5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+    // Some Intel VideoToolbox encoders reject 180-pixel-tall inputs. Use a supported
+    // frame size so this exercises colour-tag preservation rather than that limit.
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=640x360:r=30:d=0.5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
       '-bsf:v', 'h264_metadata=colour_primaries=1:transfer_characteristics=13:matrix_coefficients=1', src]);
     const tags = await colorTagsOf(src);
     assert.equal(tags.color_transfer, 'iec61966-2-1');

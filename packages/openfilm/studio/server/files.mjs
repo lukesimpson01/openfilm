@@ -291,6 +291,22 @@ export async function importFile(root, rel, body) {
   }
 }
 
+/**
+ * A FRAME layer's page or script, written in place (importFile never overwrites: it keeps both under two names).
+ * Only inside the project's `frame/` folder, where Studio keeps the pages that draw its layers.
+ */
+export async function writeFrameFile(/** @type {string} */ root, /** @type {string} */ rel, /** @type {AsyncIterable<Buffer>} */ body) {
+  if (typeof rel !== 'string' || !/^frame\/[^/\\]+\.(html|js|json|css)$/.test(rel)) throw new FileError('only frame/ pages and scripts are written in place');
+  const abs = inside(root, rel);
+  await mkdir(dirname(abs), { recursive: true });
+  const chunks = [];
+  for await (const c of body) chunks.push(c);
+  const tmp = `${abs}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tmp, Buffer.concat(chunks));
+  await rename(tmp, abs);
+  return { path: rel };
+}
+
 /** Make a folder under assets/ (a person's folder shows even while empty). */
 export async function makeFolder(/** @type {string} */ root, /** @type {string} */ asked) {
   askedInside(root, asked);

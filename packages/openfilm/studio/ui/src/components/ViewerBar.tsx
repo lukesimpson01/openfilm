@@ -24,6 +24,7 @@ export function ViewerBar({
   onFullscreen,
   playback,
   extra,
+  transport = true,
 }: {
   timeMs: number;
   /** The time on the clock (playing, scrubbing): only the timecode follows it, the rest of the bar stays still. */
@@ -37,6 +38,8 @@ export function ViewerBar({
   playback?: PlaybackSettings | null;
   /** Shown before the buttons on the right (the source viewer: the part marked). */
   extra?: React.ReactNode;
+  /** false: the play button and the timecode are elsewhere (the timeline's toolbar, see Transport) */
+  transport?: boolean;
 }) {
   const t = useT();
   const keyHint = useKeyHint();
@@ -51,6 +54,7 @@ export function ViewerBar({
     <div className="grid h-8 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-2">
       {/* where we are is read constantly: body color, 12px; the length one step fainter. One line, never wrapped:
           when it does not fit, the length is clipped first. No hour field for a film under an hour. */}
+      {transport ? <>
       <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] tabular-nums text-[var(--text)]">
         <LiveText clock={clock} timeMs={timeMs} format={(ms) => formatTimecode(ms, { hours })} />
         <span className="text-[11px] text-[var(--text-faint)]">
@@ -70,6 +74,7 @@ export function ViewerBar({
           {playing ? <Pause size={PANE_ICON} fill="currentColor" /> : <Play size={PANE_ICON} fill="currentColor" />}
         </button>
       </Tooltip>
+      </> : <><span /><span /></>}
       <span className="flex items-center justify-end gap-1">
         {extra}
         {playback ? (
@@ -92,6 +97,31 @@ export function ViewerBar({
             </button>
           </Tooltip>
         ) : null}
+      </span>
+    </div>
+  );
+}
+
+/** Play and the timecode as one centered group, for the timeline's toolbar row. */
+export function Transport({ timeMs, clock, totalMs, playing, onPlayPause }: {
+  timeMs: number; clock?: PlaybackClock | null; totalMs: number; playing: boolean; onPlayPause: () => void;
+}) {
+  const t = useT();
+  const keyHint = useKeyHint();
+  useTimecodeFps();
+  const hours = totalMs >= 3_600_000;
+  return (
+    <div className="flex items-center gap-2.5" data-transport="">
+      <Tooltip label={playing ? t('viewer.pause') : t('viewer.play')} shortcut={keyHint('play-pause')}>
+        <button type="button" onClick={onPlayPause} disabled={totalMs <= 0} onMouseDown={(e) => e.preventDefault()}
+          aria-label={playing ? t('viewer.pause') : t('viewer.play')}
+          className="flex h-[26px] w-[26px] items-center justify-center rounded-full text-[var(--text)] transition hover:bg-[var(--bg-hover)] disabled:opacity-30">
+          {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" className="ml-px" />}
+        </button>
+      </Tooltip>
+      <span className="whitespace-nowrap text-[12px] tabular-nums text-[var(--text)]">
+        <LiveText clock={clock} timeMs={timeMs} format={(ms) => formatTimecode(ms, { hours })} />
+        <span className="text-[11px] text-[var(--text-faint)]">{' / '}{formatTimecode(totalMs, { hours })}</span>
       </span>
     </div>
   );

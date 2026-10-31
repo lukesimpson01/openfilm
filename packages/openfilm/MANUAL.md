@@ -83,3 +83,7 @@ Run them in the film's folder. Each one's `--help` lists its options:
 The words of a sound or a video are a WebVTT beside it with the same name (`vo/1.wav` → `vo/1.vtt`): a cue per subtitle line, a timestamp tag at each word. Studio makes the film's subtitles from them; never draw subtitles in a page.
 
 Media can come from `get`, any service the person uses (with its API docs and their key), or your own code. Save it under `assets/`.
+
+## Shorts extensions
+
+This copy is the Shorts editor: its layer pages (motion graphics, transitions, effects, 3D devices, cameras, tracked text) are described in SHORTS-EXTENSIONS.md.

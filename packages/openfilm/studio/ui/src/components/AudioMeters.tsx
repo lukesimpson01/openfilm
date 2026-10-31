@@ -21,9 +21,8 @@ export const METERS_W = 44;
 const CLIP_H = 7;
 const TOP = CLIP_H + 5;
 const BOTTOM = 6;
-const BAR_W = 6;
-const BAR_GAP = 2;
-const BARS_X = 4;
+/* bar sizes: the timeline's narrow pair, or the mixer's master (larger) */
+const DIMS = { small: { BAR_W: 6, BAR_GAP: 2, BARS_X: 4, FONT: 8, W: METERS_W }, big: { BAR_W: 16, BAR_GAP: 5, BARS_X: 10, FONT: 10, W: 84 } };
 
 /** The bar's colors along the scale: green, yellow from −18 dB, red from −6 dB. */
 function paint(ctx: CanvasRenderingContext2D, top: number, height: number, alpha: number) {
@@ -41,19 +40,22 @@ function paint(ctx: CanvasRenderingContext2D, top: number, height: number, alpha
 type Shown = { peak: number; rms: number; held: HeldPeak & { shown: number } };
 const quiet = (): Shown => ({ peak: METER_FLOOR_DB, rms: METER_FLOOR_DB, held: { db: METER_FLOOR_DB, at: 0, shown: METER_FLOOR_DB } });
 
-export function AudioMeters({ levels, playing }: {
+export function AudioMeters({ levels, playing, big = false }: {
+  /** The mixer's master: wider bars and scale, filling its column. */
+  big?: boolean;
   /** The mix's latest samples, or null when nothing plays (see Player.levels). */
   levels: () => MixSamples | null;
   playing: boolean;
 }) {
   const t = useT();
+  const { BAR_W, BAR_GAP, BARS_X, FONT, W } = DIMS[big ? 'big' : 'small'];
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const boxRef = React.useRef<HTMLDivElement | null>(null);
   const shown = React.useRef<[Shown, Shown]>([quiet(), quiet()]);
   const [clipped, setClipped] = React.useState<[boolean, boolean]>([false, false]);
   const clippedRef = React.useRef(clipped);
   clippedRef.current = clipped;
-  const [size, setSize] = React.useState({ w: METERS_W, h: 0 });
+  const [size, setSize] = React.useState({ w: W, h: 0 });
   const [peakText, setPeakText] = React.useState(METER_FLOOR_DB);
 
   React.useLayoutEffect(() => {
@@ -84,7 +86,7 @@ export function AudioMeters({ levels, playing }: {
     const faint = styles.getPropertyValue('--tl-faint').trim() || 'rgba(128,128,128,0.6)';
     const lane = styles.getPropertyValue('--tl-lane').trim() || 'rgba(128,128,128,0.15)';
     /* the scale: a line and a number every 6 dB, a number every 12 */
-    ctx.font = '8px ui-sans-serif, system-ui, sans-serif';
+    ctx.font = `${FONT}px ui-sans-serif, system-ui, sans-serif`;
     ctx.textBaseline = 'middle';
     const scaleX = BARS_X + 2 * BAR_W + BAR_GAP + 3;
     for (const mark of METER_MARKS) {
@@ -107,7 +109,7 @@ export function AudioMeters({ levels, playing }: {
         ctx.fillRect(x, Math.round(y(ch.held.shown)), BAR_W, 2);
       }
     });
-  }, [size]);
+  }, [size, BAR_W, BAR_GAP, BARS_X, FONT]);
 
   /* its colors are the theme's, read as it draws: when the theme changes it draws again, or it would keep the old
      theme's bars until the film plays */
@@ -153,12 +155,12 @@ export function AudioMeters({ levels, playing }: {
   return (
     <div
       className="flex h-full shrink-0 flex-col border-l"
-      style={{ width: METERS_W, borderColor: 'var(--tl-line)', background: 'var(--tl-head)' }}
+      style={big ? { width: '100%', height: '100%', borderColor: 'transparent', background: 'transparent' } : { width: METERS_W, borderColor: 'var(--tl-line)', background: 'var(--tl-head)' }}
       data-audio-meters=""
       aria-label={t('editorTools.meters')}
       role="group"
     >
-      <div className="flex h-[34px] shrink-0 items-center justify-center font-mono text-[9px] tabular-nums" style={{ color: peakText >= -0.05 ? '#e5484d' : 'var(--tl-faint)' }}
+      <div className={`flex shrink-0 items-center justify-center font-mono tabular-nums ${big ? 'h-[24px] text-[11px]' : 'h-[40px] text-[9px]'}`} style={{ color: peakText >= -0.05 ? '#e5484d' : 'var(--tl-faint)' }}
         title={t('editorTools.metersPeak')}>
         {formatDb(peakText)}
       </div>

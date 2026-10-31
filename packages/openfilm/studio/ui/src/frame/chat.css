@@ -1,0 +1,463 @@
+.cs-root{--ink:#111318;--muted:#687181;--border:#e0e4eb;--line:#e6e7ea;--blue:#3c5cff;--blue2:#274bec;--pale:#f4f7fc;--shadow:0 1px 2px rgba(14,23,43,.055);--radius:20px;--wa-pat-light:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNDQiIGhlaWdodD0iMTQ0IiB2aWV3Qm94PSIwIDAgMTQ0IDE0NCI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNzQ4NzdiIiBzdHJva2Utd2lkdGg9IjEuNyIgb3BhY2l0eT0iLjIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMCAyMmw0IDggOSAxLTcgNiAyIDktOC00LTggNCAyLTktNy02IDktMXoiLz48cGF0aCBkPSJNOTQgMTJjNyAyIDExIDEwIDYgMTYtNiA3LTE0IDMtMTctMi00LTYgMS0xNCAxMS0xNHoiLz48cGF0aCBkPSJNODUgMjBxOS04IDE0IDAiLz48cGF0aCBkPSJNMTEwIDUycS0xLTExIDEwLTEwIDEyIDIgOSAxMy0zIDEyLTE1IDExLTctMi00LTE0eiIvPjxwYXRoIGQ9Ik0xMTMgNTJsOCA1LTggMnoiLz48cGF0aCBkPSJNMjkgOTFjLTUtOS0xOC03LTIwIDMtNCAxMyAxMyAyNCAyMCAyNyA4LTYgMjEtMTUgMTctMjUtNC0xMC0xNS0xMC0xNy01eiIvPjxwYXRoIGQ9Ik01OSAxMGMxNCAxIDE3IDE2IDIgMTgtMTIgMi0xNS0xNy0xLTE4eiIvPjxwYXRoIGQ9Ik01OCA1MGwyMCAwIDAgMTMtMjAgMHoiLz48cGF0aCBkPSJNNjMgNTB2LTZtMTAgNnYtNk02MiA2OWMwIDYgMTAgOSAxMyAyIi8+PHBhdGggZD0iTTExNCAxMDlsLTggNiAyLTEzLTktOSAxMyAxIDYtMTIgNiAxMiAxMy0xLTEwIDkgMiAxM3oiLz48cGF0aCBkPSJNNTQgMTE2cTE2LTEyIDI1IDVtLTIyIDJxMTMtMTIgMjIgNSIvPjxwYXRoIGQ9Ik0xMiA2NnExMS0xMiAxOSAwbC04IDEyeiIvPjxwYXRoIGQ9Ik05MiA3N2MtNiA1LTggMTEtMSAxNCA3IDUgMTctMiAxMy03LTMtNC04IDAtMTIgMCIvPjwvZz48L3N2Zz4=');--wa-pat-dark:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNDQiIGhlaWdodD0iMTQ0IiB2aWV3Qm94PSIwIDAgMTQ0IDE0NCI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjYTJiNmFhIiBzdHJva2Utd2lkdGg9IjEuNyIgb3BhY2l0eT0iLjE5IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMCAyMmw0IDggOSAxLTcgNiAyIDktOC00LTggNCAyLTktNy02IDktMXoiLz48cGF0aCBkPSJNOTQgMTJjNyAyIDExIDEwIDYgMTYtNiA3LTE0IDMtMTctMi00LTYgMS0xNCAxMS0xNHoiLz48cGF0aCBkPSJNODUgMjBxOS04IDE0IDAiLz48cGF0aCBkPSJNMTEwIDUycS0xLTExIDEwLTEwIDEyIDIgOSAxMy0zIDEyLTE1IDExLTctMi00LTE0eiIvPjxwYXRoIGQ9Ik0xMTMgNTJsOCA1LTggMnoiLz48cGF0aCBkPSJNMjkgOTFjLTUtOS0xOC03LTIwIDMtNCAxMyAxMyAyNCAyMCAyNyA4LTYgMjEtMTUgMTctMjUtNC0xMC0xNS0xMC0xNy01eiIvPjxwYXRoIGQ9Ik01OSAxMGMxNCAxIDE3IDE2IDIgMTgtMTIgMi0xNS0xNy0xLTE4eiIvPjxwYXRoIGQ9Ik01OCA1MGwyMCAwIDAgMTMtMjAgMHoiLz48cGF0aCBkPSJNNjMgNTB2LTZtMTAgNnYtNk02MiA2OWMwIDYgMTAgOSAxMyAyIi8+PHBhdGggZD0iTTExNCAxMDlsLTggNiAyLTEzLTktOSAxMyAxIDYtMTIgNiAxMiAxMy0xLTEwIDkgMiAxM3oiLz48cGF0aCBkPSJNNTQgMTE2cTE2LTEyIDI1IDVtLTIyIDJxMTMtMTIgMjIgNSIvPjxwYXRoIGQ9Ik0xMiA2NnExMS0xMiAxOSAwbC04IDEyeiIvPjxwYXRoIGQ9Ik05MiA3N2MtNiA1LTggMTEtMSAxNCA3IDUgMTctMiAxMy03LTMtNC04IDAtMTIgMCIvPjwvZz48L3N2Zz4=');font-family:Inter,-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Arial,sans-serif;color:var(--ink);background:#fff;font-size:16px;color-scheme:light}
+.cs-root *{box-sizing:border-box}.cs-root,.cs-root{margin:0}.cs-root button,.cs-root input,.cs-root select,.cs-root textarea{font:inherit}.cs-root button{cursor:pointer;color:inherit}.cs-root button:disabled{opacity:.48;cursor:not-allowed}.cs-root button:focus-visible,.cs-root input:focus-visible,.cs-root select:focus-visible,.cs-root textarea:focus-visible{outline:2px solid #6387ff;outline-offset:2px}.cs-root svg{display:inline-block;vertical-align:middle}.cs-root button svg{pointer-events:none}.cs-root .i{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.cs-root .i.sm{width:16px;height:16px}.cs-root .i.lg{width:23px;height:23px}.cs-root .app{max-width:1552px;margin:40px auto 38px;padding:0 1px}.cs-root .workspace{display:grid;grid-template-columns:minmax(0,1021px) minmax(355px,490px);gap:40px;min-height:630px}.cs-root .panel{height:630px;background:white;border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;min-width:0}.cs-root .editor{position:relative}.cs-root .inner{padding:29px 30px 28px;height:100%}.cs-root .pagehead{height:62px;display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--line);gap:14px}.cs-root .pagehead h1,.cs-root .previewHead h2{font-size:26px;line-height:38px;font-weight:550;letter-spacing:-.65px;margin:0}.cs-root .pagehead h1{margin-top:2px}.cs-root .topButtons{display:flex;align-items:center;gap:9px}.cs-root .pill{height:49px;padding:0 21px;border:1px solid #dce0e8;border-radius:32px;background:#fff;font-weight:500;font-size:17px;white-space:nowrap}.cs-root .pill.primary,.cs-root .primaryAction{border:0;color:#fff;background:linear-gradient(115deg,#4772fd 0%,#3841ff 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}.cs-root .pill:hover,.cs-root .outlineBtn:hover,.cs-root .actionRound:hover{filter:brightness(.975)}.cs-root .profile{height:130px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}.cs-root .avatarBig{width:60px;height:60px;border-radius:50%;background:#9ca4b3;display:grid;place-items:center;color:#fff;font-size:21px;flex:none}.cs-root .profileEdit{flex:1;min-width:0}.cs-root .fieldLabel{font-size:18px;font-weight:450;margin-bottom:11px}.cs-root .profileEdit input{height:46px;width:100%;border:1.5px solid #5d84ff;border-radius:10px;padding:0 15px;font-size:18px;color:#111;background:#fff}.cs-root .profileEdit input:focus{outline:none;box-shadow:0 0 0 1px #7392ff}.cs-root .messagesHead{height:77px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.cs-root .messagesHead strong{font-size:18px;font-weight:550}.cs-root .smallActions{display:flex;gap:11px}.cs-root .outlineBtn{height:37px;border:1px solid #dfe2e8;border-radius:24px;padding:0 15px;background:#fff;display:flex;align-items:center;gap:10px;white-space:nowrap;font-size:15px}.cs-root .messageList{height:174px;overflow-y:auto;padding-top:27px;padding-right:1px;scrollbar-color:#d2d6e0 transparent;scrollbar-width:thin}.cs-root .messageRow{height:46px;display:grid;grid-template-columns:minmax(0,1fr) 60px 46px;align-items:center;gap:16px;margin:0 0 13px}.cs-root .messageText{height:45px;border:1px solid #dfe2e7;box-shadow:0 1px 2px rgba(23,36,53,.08);border-radius:9px;display:flex;align-items:center;padding:0 13px;gap:13px;overflow:hidden}.cs-root .messageText:focus-within{border-color:#6186ff}.cs-root .messageText input{background:transparent;border:0;outline:none;min-width:0;width:100%;font-size:18px}.cs-root .messageText input:focus{outline:none}.cs-root .sideSwitch{height:36px;width:60px;border-radius:25px;border:0;background:#b0b8cd;display:flex;align-items:center;justify-content:flex-start;padding:3px;transition:background .22s}.cs-root .sideSwitch.sender{background:#041152;justify-content:flex-end}.cs-root .sideKnob{width:30px;height:30px;background:#fff;border-radius:50%;display:grid;place-items:center;color:#142040}.cs-root .actionRound{border:0;background:#f3f4f6;border-radius:50%;width:45px;height:45px;display:grid;place-items:center;color:#677180}.cs-root .messageComposer{display:grid;grid-template-columns:minmax(0,1fr) 60px 45px;gap:11px;align-items:center;margin-top:24px}.cs-root .composeBox{border:1px solid #dfe2e8;border-radius:9px;box-shadow:0 1px 2px #00000012;display:flex;gap:13px;align-items:center;height:46px;padding:0 15px;color:#7a8492}.cs-root .composeBox input{width:100%;border:0;outline:none;font-size:18px;color:#16181f}.cs-root .composeBox input:focus{outline:none}.cs-root .addMessage{height:52px;width:100%;border:1px solid #dce4ef;border-radius:20px;background:#f4f8ff;color:#273245;font-size:21px;margin-top:15px}.cs-root .addMessage:hover{background:#eaf1ff}.cs-root .previewPanel{padding:29px 50px 30px}.cs-root .previewHead{border-bottom:1px solid var(--line);height:47px}.cs-root .phoneSpace{height:calc(100% - 48px);display:flex;justify-content:center;align-items:center}.cs-root .phone{width:256px;height:454px;border-radius:15px;position:relative;overflow:hidden;background:#000;box-shadow:0 0 0 1px #d4dbe6;display:flex;flex-direction:column}.cs-root .phone.ios-light{background:#fff}.cs-root .phone.ios-dark{background:#000}.cs-root .phone.whatsapp-light{background:#eee9e1}.cs-root .phone.whatsapp-dark{background:#0b141a}.cs-root .phone.full{height:min(80vh,750px);width:min(420px,90vw);border-radius:18px}.cs-root .iosbar{height:70px;background:#1e1e20;color:#fff;position:relative;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;padding:8px 10px 0}.cs-root .phone.ios-light .iosbar{background:#f9f9fb;color:#181a20;border-bottom:1px solid #e7e8eb}.cs-root .backBadge{color:#167aff;display:flex;align-items:center;gap:0;font-size:11px;margin-top:4px}.cs-root .badge99{background:#087dff;padding:1px 6px;border-radius:15px;font-size:10px;color:white}.cs-root .contactMini{display:flex;align-items:center;flex-direction:column;position:absolute;left:50%;transform:translateX(-50%);top:3px;max-width:65%;white-space:nowrap}.cs-root .miniAvatar{border-radius:50%;height:25px;width:25px;background:#9ca5b5;color:#fff;display:grid;place-items:center;font-size:12px;flex:none}.cs-root .contactMini .contactName{font-size:10px;margin-top:3px;max-width:180px;overflow:hidden;text-overflow:ellipsis}.cs-root .contactChevron{color:#7f838b;margin-left:3px}.cs-root .waBar{height:62px;flex-shrink:0;display:flex;align-items:center;padding:8px 9px;background:#202c33;color:#f5f5f5;gap:8px}.cs-root .phone.whatsapp-light .waBar{background:#f1f3f4;color:#161b20}.cs-root .waContact{flex:1;min-width:0}.cs-root .waName{font-size:12px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cs-root .waStatus{font-size:9px;opacity:.7;margin-top:2px}.cs-root .waBar .i{width:15px;height:15px}.cs-root .waBar .miniAvatar{width:27px;height:27px}.cs-root .chatMessages{min-height:0;flex:1;overflow-y:auto;padding:6px 8px 56px;scroll-behavior:smooth;scrollbar-width:none}.cs-root .chatMessages::-webkit-scrollbar{display:none}.cs-root .bubbleLine{display:flex;margin-bottom:9px;transition:opacity .25s,transform .3s}.cs-root .bubbleLine.from-sender{justify-content:flex-end}.cs-root .bubble{display:inline-block;max-width:88%;font-size:12.7px;line-height:1.31;word-break:break-word;border-radius:15px;padding:7px 10px;letter-spacing:-.1px;box-shadow:0 1px 1px #00000008}.cs-root .playerControls{position:absolute;bottom:0;left:0;right:0;z-index:4;padding:18px 16px 16px;color:#fff;display:flex;align-items:center;gap:13px;background:linear-gradient(transparent,rgba(0,0,0,.74))}.cs-root .playButton{width:25px;height:25px;display:grid;place-items:center;color:white;border:0;background:transparent;padding:0}.cs-root .timeStamp{font-size:14px;white-space:nowrap;margin-left:1px}.cs-root .rangeTrack{position:absolute;bottom:10px;left:15px;right:15px;height:5px;border-radius:8px;background:#ffffff55}.cs-root .rangeFill{width:0%;background:#ffffffa8;height:100%;border-radius:8px;transition:width .1s linear}.cs-root .fullScreen{margin-left:auto}.cs-root .footer{height:104px;margin-top:40px;border:1px solid var(--border);border-radius:20px;box-shadow:0 1px 1px #00000005;display:flex;justify-content:space-between;align-items:center;padding:0 21px;gap:10px}.cs-root .steps{display:flex;align-items:center;gap:13px;flex-wrap:nowrap}.cs-root .step{border:0;background:none;display:flex;align-items:center;gap:10px;padding:0;font-size:18px;white-space:nowrap}.cs-root .stepIcon{width:40px;height:40px;display:grid;place-items:center;border-radius:50%;background:#e2ebff;color:#111c3b;transition:background .18s,color .18s}.cs-root .step.current .stepIcon{background:#3b5aff;color:white}.cs-root .stepSep{color:#a5afc1;font-size:26px}.cs-root .footerBtns{display:flex;gap:11px;align-items:center}.cs-root .navBtn{height:61px;min-width:137px;border-radius:34px;padding:0 25px;border:1px solid #dfe2e8;background:white;font-size:20px;display:flex;align-items:center;justify-content:center;gap:15px}.cs-root .navBtn.primaryAction{min-width:133px;border:0;color:white;background:linear-gradient(115deg,#4772fd,#3841ff)}.cs-root .navBtn:hover{filter:brightness(.97)}.cs-root .hidden{display:none!important}
+.cs-root .themeGrid{display:grid;grid-template-columns:1fr 1fr;gap:27px 11px;padding-top:30px;height:506px;overflow-y:auto;scrollbar-width:thin}.cs-root .themeCard{border:0;background:none;text-align:left;display:flex;flex-direction:column;gap:15px;padding:0 0 2px;border-radius:12px}.cs-root .themeCard.selected .themeShot{outline:2px solid #5074ff;outline-offset:2px}.cs-root .themeCard strong{font-size:18px;font-weight:560;color:#273244}.cs-root .themeShot{height:171px;width:100%;overflow:hidden;border:1px solid #dce1e8;border-radius:14px;display:flex;flex-direction:column}.cs-root .themeTop{height:67px;display:flex;align-items:center;gap:11px;padding:0 14px;flex-shrink:0}.cs-root .themeShot.ios-light .themeTop{height:85px;justify-content:center;position:relative;background:#fafafb}.cs-root .themeShot.ios-dark .themeTop{height:85px;justify-content:center;position:relative;background:#1d1d1f;color:#f4f4f5}.cs-root .themeShot.whatsapp-light .themeTop{background:#fafafa;color:#23252b}.cs-root .themeShot.whatsapp-dark .themeTop{background:#1e1e1f;color:#f4f4f4}.cs-root .themeBack{font-size:36px;font-weight:250;line-height:1}.cs-root .themeShot.ios-light .themeBack,.cs-root .themeShot.ios-dark .themeBack{position:absolute;left:10px;top:6px;color:#0879f9}.cs-root .themeContact{min-width:0;display:flex;align-items:center;gap:10px;flex:1}.cs-root .themeShot.ios-light .themeContact,.cs-root .themeShot.ios-dark .themeContact{flex-direction:column;gap:1px;align-self:center}.cs-root .themeContact .miniAvatar{width:46px;height:46px;background:#3f424b;font-size:19px}.cs-root .themeShot.ios-light .miniAvatar,.cs-root .themeShot.ios-dark .miniAvatar{height:42px;width:42px}.cs-root .themeShot .name{font-size:17px;font-weight:650;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cs-root .themeShot.ios-light .name,.cs-root .themeShot.ios-dark .name{font-size:14px}.cs-root .themeShot .online{font-size:14px;color:#92949d}.cs-root .themeContactsButtons{display:flex;gap:15px;margin-left:auto}.cs-root .themeShot.ios-light .themeContactsButtons,.cs-root .themeShot.ios-dark .themeContactsButtons{position:absolute;right:14px;color:#277bf7}.cs-root .themeShot .sampleMessages{flex:1;padding:6px 13px;display:flex;flex-direction:column;justify-content:space-between;gap:5px}.cs-root .themeShot.whatsapp-light .sampleMessages{background:#ece7df}.cs-root .themeShot.whatsapp-dark .sampleMessages{background:#0b0c12}.cs-root .themeShot.ios-light .sampleMessages{background:#fff}.cs-root .themeShot.ios-dark .sampleMessages{background:#000}.cs-root .sampleLine{display:flex}.cs-root .sampleLine.out{justify-content:flex-end}.cs-root .sampleBub{max-width:93%;padding:7px 11px;font-size:16px;line-height:20px;border-radius:19px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.cs-root .ios-light .sampleBub.in{background:#ecebf1;color:#23242a}.cs-root .ios-dark .sampleBub.in{background:#303033;color:#fff}.cs-root .ios-light .sampleBub.out,.cs-root .ios-dark .sampleBub.out{background:#1280ff;color:#fff}.cs-root .whatsapp-light .sampleBub.in{background:white}.cs-root .whatsapp-light .sampleBub.out{background:#d9f9c6}.cs-root .whatsapp-dark .sampleBub.in{background:#24262b;color:#fff}.cs-root .whatsapp-dark .sampleBub.out{background:#055641;color:#fff}
+.cs-root .gameplayGrid{height:509px;overflow-y:auto;padding-top:30px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-content:start;gap:20px}.cs-root .gameCard{border:1px solid #dfe2e8;border-radius:17px;background:white;overflow:hidden;text-align:left;padding:0;transition:border-color .15s,transform .15s}.cs-root .gameCard:hover{transform:translateY(-2px)}.cs-root .gameCard.selected{border-color:#4567ff;box-shadow:0 0 0 1px #4567ff}.cs-root .gameVisual{height:381px;background:linear-gradient(160deg,#f4f7fb,#e1e7f1);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:15px;color:#9ca8bc;position:relative}.cs-root .gameVisual.gray{background:linear-gradient(135deg,#eff3f8,#d4dce9)}.cs-root .gameVisual.blue{background:linear-gradient(135deg,#c8d9ff,#a8bce7)}.cs-root .gameVisual.dark{background:linear-gradient(135deg,#2f3b53,#151c2c);color:#cedbfa}.cs-root .gameVisual .visualIcon{width:67px;height:67px;border-radius:50%;display:grid;place-items:center;background:#ffffff9c}.cs-root .gameVisual.dark .visualIcon{background:#ffffff19}.cs-root .gameVisual span{font-size:13px;font-weight:650;letter-spacing:.07em;text-transform:uppercase}.cs-root .gameDetails{padding:17px 15px 16px}.cs-root .gameDetails .name{font-size:18px;margin-bottom:17px}.cs-root .metaLine{display:flex;align-items:center;gap:7px;font-size:14px;color:#667185;white-space:nowrap}.cs-root .metaLine .chip{background:#f0f2f6;border-radius:7px;padding:6px 5px;color:#394356}.cs-root .viewFull{margin-top:16px;color:#657181;font-size:16px}
+.cs-root .dialogShade{position:fixed;inset:0;z-index:100;background:#09132888;display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)}.cs-root .dialog{background:#fff;border:1px solid #e0e5ee;box-shadow:0 25px 75px #0003;border-radius:20px;width:min(500px,100%);padding:28px;max-height:90vh;overflow:auto}.cs-root .dialog h3{font-size:23px;margin:0 0 11px}.cs-root .dialog p{color:#697383;line-height:1.55;font-size:15px}.cs-root .dialogActions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}.cs-root .dialogBtn{padding:12px 18px;border-radius:12px;border:1px solid #dce0e6;background:#fff}.cs-root .dialogBtn.strong{border:0;background:var(--blue);color:white}.cs-root .promptSelect,.cs-root .dialog textarea{width:100%;padding:12px;border:1px solid #dce0e6;border-radius:12px;margin:9px 0}.cs-root .dialog textarea{min-height:100px;resize:vertical}.cs-root .toast{position:fixed;z-index:110;bottom:25px;left:50%;transform:translateX(-50%);background:#1d2739;color:#fff;padding:13px 20px;border-radius:12px;font-size:14px;box-shadow:0 10px 40px #0003}.cs-root .fullShade .dialog{background:transparent;border:0;box-shadow:none;width:auto;padding:0;overflow:visible}.cs-root .closeFull{position:fixed;top:28px;right:30px;display:grid;place-items:center;border:0;border-radius:50%;width:40px;height:40px;background:white;color:#101525;font-size:25px}.cs-root .fullShade .phone{box-shadow:0 20px 80px #000a}.cs-root .exportProgress{height:7px;background:#e6ebf3;border-radius:9px;overflow:hidden;margin-top:10px}.cs-root .exportProgress>div{height:100%;background:#3e62ff;width:0%;transition:width .1s}
+@media(max-width:1200px){.cs-root .app{padding:0 22px;margin-top:24px}.cs-root .workspace{gap:18px;grid-template-columns:minmax(0,1.8fr) minmax(300px,.9fr)}.cs-root .previewPanel{padding:29px 24px}.cs-root .footer{margin-top:18px}.cs-root .steps{gap:6px}.cs-root .step{font-size:15px}.cs-root .stepIcon{width:37px;height:37px}.cs-root .smallActions .outlineBtn{padding:0 9px}}
+@media(max-width:830px){.cs-root .app{padding:0 12px;margin-top:12px}.cs-root .workspace{grid-template-columns:1fr;gap:16px}.cs-root .panel{height:auto;min-height:545px}.cs-root .editor{min-height:625px}.cs-root .previewPanel{min-height:565px}.cs-root .phoneSpace{min-height:487px}.cs-root .inner{padding:21px 17px}.cs-root .pagehead h1,.cs-root .previewHead h2{font-size:23px}.cs-root .profile{height:110px}.cs-root .messagesHead{height:66px}.cs-root .messageList{height:182px}.cs-root .footer{height:auto;min-height:90px;padding:12px;flex-direction:column;gap:15px;align-items:stretch}.cs-root .steps{justify-content:center}.cs-root .footerBtns{justify-content:flex-end}.cs-root .themeGrid{height:485px}.cs-root .themeShot{height:151px}.cs-root .gameplayGrid{height:500px}.cs-root .gameVisual{height:275px}}
+@media(max-width:535px){.cs-root .pagehead{align-items:center}.cs-root .pagehead h1{font-size:21px}.cs-root .pill{height:40px;padding:0 11px;font-size:13px}.cs-root .profile .avatarBig{width:48px;height:48px}.cs-root .profileEdit input{font-size:15px}.cs-root .messagesHead strong{font-size:16px}.cs-root .smallActions{gap:4px}.cs-root .smallActions .outlineBtn{font-size:12px;padding:0 8px;gap:3px}.cs-root .messageRow{grid-template-columns:minmax(0,1fr) 47px 36px;gap:7px}.cs-root .messageText input,.cs-root .composeBox input{font-size:15px}.cs-root .sideSwitch{width:47px}.cs-root .sideKnob{height:27px;width:27px}.cs-root .actionRound{height:35px;width:35px}.cs-root .messageComposer{grid-template-columns:minmax(0,1fr) 47px 36px;gap:6px}.cs-root .addMessage{font-size:17px}.cs-root .themeGrid{gap:15px 9px}.cs-root .themeShot{height:125px}.cs-root .themeTop{height:53px;padding:0 7px;gap:5px}.cs-root .themeShot.ios-light .themeTop,.cs-root .themeShot.ios-dark .themeTop{height:64px}.cs-root .themeShot .name{font-size:11px}.cs-root .themeShot .online{font-size:9px}.cs-root .themeContact .miniAvatar{width:30px;height:30px}.cs-root .themeShot.ios-light .miniAvatar,.cs-root .themeShot.ios-dark .miniAvatar{width:30px;height:30px}.cs-root .themeContactsButtons{gap:4px}.cs-root .sampleBub{font-size:10px;line-height:13px;padding:5px 7px}.cs-root .themeCard strong{font-size:13px}.cs-root .gameplayGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.cs-root .gameVisual{height:220px}.cs-root .gameDetails{padding:12px 8px}.cs-root .metaLine{flex-wrap:wrap}.cs-root .steps{gap:4px}.cs-root .step{font-size:0;gap:3px}.cs-root .stepIcon{width:35px;height:35px}.cs-root .stepSep{font-size:18px}.cs-root .footerBtns{justify-content:stretch}.cs-root .navBtn{min-width:0;flex:1;height:50px;font-size:17px}}
+@media(prefers-reduced-motion:reduce){.cs-root *,.cs-root *:before,.cs-root *:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* v2 — story chat overlay on chroma green */
+.cs-root .phone{--chat-scale:1;background:#00ff00!important;container-type:inline-size;display:block}
+.cs-root .phone.full{--chat-scale:1.64}
+.cs-root .phone.bg-green{background:#00ff00!important}
+.cs-root .phone.bg-none{background:#00ff00!important}
+.cs-root .phone.bg-soft{background:linear-gradient(140deg,#e9f0ff,#b0c6f5)!important}
+.cs-root .phone.bg-dark{background:#151c2b!important}
+.cs-root .phone .storyChat{position:absolute;top:11%;left:10%;width:80%;height:45px;max-height:78%;border-radius:calc(11px * var(--chat-scale));display:flex;flex-direction:column;overflow:hidden;background:#000;box-shadow:0 2px 8px #0003;will-change:height;transition:height .46s cubic-bezier(.2,.8,.3,1);z-index:2}
+.cs-root .phone.ios-light .storyChat{background:#fff}
+.cs-root .phone.ios-dark .storyChat{background:#000}
+.cs-root .phone.whatsapp-light .storyChat{background:#efeae2}
+.cs-root .phone.whatsapp-dark .storyChat{background:#0b141a}
+.cs-root .phone .storyChat .iosbar{height:calc(42px * var(--chat-scale));padding:calc(5px * var(--chat-scale)) calc(6px * var(--chat-scale)) 0;flex:none}
+.cs-root .phone .storyChat .contactMini{top:calc(3px * var(--chat-scale))}
+.cs-root .phone .storyChat .miniAvatar{height:calc(21px * var(--chat-scale));width:calc(21px * var(--chat-scale));font-size:calc(10px * var(--chat-scale))}
+.cs-root .phone .storyChat .contactMini .contactName{font-size:calc(8.4px * var(--chat-scale));margin-top:calc(2px * var(--chat-scale));max-width:calc(130px * var(--chat-scale))}
+.cs-root .phone .storyChat .backBadge{margin-top:calc(4px * var(--chat-scale));font-size:calc(10px * var(--chat-scale))}
+.cs-root .phone .storyChat .backBadge .i{width:calc(13px * var(--chat-scale));height:calc(13px * var(--chat-scale))}
+.cs-root .phone .storyChat .badge99{font-size:calc(8px * var(--chat-scale));padding:1px calc(3px * var(--chat-scale))}
+.cs-root .phone .storyChat .iosbar > .i{width:calc(15px * var(--chat-scale));height:calc(15px * var(--chat-scale));margin-top:calc(2px * var(--chat-scale));color:#0a84ff}
+.cs-root .phone .storyChat .waBar{height:calc(46px * var(--chat-scale));padding:0 calc(8px * var(--chat-scale));gap:calc(5px * var(--chat-scale));background:#202c33;color:#e9edef;flex:none}
+.cs-root .phone.whatsapp-light .storyChat .waBar{background:#f8f9fa;color:#111b21;border-bottom:1px solid #e4e6e8}
+.cs-root .phone .storyChat .waBar .waBack{width:calc(13px * var(--chat-scale));height:calc(16px * var(--chat-scale));display:flex;align-items:center;justify-content:center;margin-right:calc(1px * var(--chat-scale));color:inherit}
+.cs-root .phone .storyChat .waBar .waBack .i{width:100%;height:100%}
+.cs-root .phone .storyChat .waBar .miniAvatar{height:calc(28px * var(--chat-scale));width:calc(28px * var(--chat-scale));background:#a2acb3;font-weight:550}
+.cs-root .phone .storyChat .waContact{line-height:1.1}
+.cs-root .phone .storyChat .waName{font-size:calc(12px * var(--chat-scale));font-weight:600;letter-spacing:0}
+.cs-root .phone .storyChat .waStatus{font-size:calc(8.5px * var(--chat-scale));opacity:1;color:#8696a0;margin-top:calc(2px * var(--chat-scale))}
+.cs-root .phone.whatsapp-light .storyChat .waStatus{color:#667781}
+.cs-root .phone .storyChat .waBar .i{width:calc(14px * var(--chat-scale));height:calc(14px * var(--chat-scale));flex-shrink:0}
+.cs-root .phone .storyChat .waHeaderIcons{display:flex;align-items:center;gap:calc(10px * var(--chat-scale));margin-left:auto}
+.cs-root .phone .storyChat .chatMessages{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;scroll-behavior:smooth;padding:calc(6px * var(--chat-scale)) calc(7px * var(--chat-scale)) calc(7px * var(--chat-scale));overscroll-behavior:contain}
+.cs-root .phone .storyChat .chatMessages::-webkit-scrollbar{display:none}
+.cs-root .phone .storyChat .bubbleLine{margin-bottom:calc(5px * var(--chat-scale));animation:cs-message-appear .38s cubic-bezier(.2,.8,.3,1) both}
+.cs-root .phone .storyChat .bubbleLine:last-child{margin-bottom:0}
+.cs-root .phone .storyChat .bubble{max-width:89%;font-size:calc(10px * var(--chat-scale));line-height:1.25;padding:calc(5px * var(--chat-scale)) calc(7px * var(--chat-scale));border-radius:calc(12px * var(--chat-scale));letter-spacing:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.cs-root .phone.ios-dark .storyChat .bubbleLine:not(.from-sender) .bubble{background:#28282b;color:#fff}
+.cs-root .phone.ios-light .storyChat .bubbleLine:not(.from-sender) .bubble{background:#e9e9ee;color:#16181c}
+.cs-root .phone.ios-dark .storyChat .from-sender .bubble,.cs-root .phone.ios-light .storyChat .from-sender .bubble{background:#0a84ff;color:#fff}
+.cs-root .phone.whatsapp-light .storyChat .bubbleLine:not(.from-sender) .bubble{background:#fff;color:#111b21;border-radius:0 calc(9px * var(--chat-scale)) calc(9px * var(--chat-scale)) calc(9px * var(--chat-scale))}
+.cs-root .phone.whatsapp-light .storyChat .from-sender .bubble{background:#d9fdd3;color:#111b21;border-radius:calc(9px * var(--chat-scale)) 0 calc(9px * var(--chat-scale)) calc(9px * var(--chat-scale))}
+.cs-root .phone.whatsapp-dark .storyChat .bubbleLine:not(.from-sender) .bubble{background:#202c33;color:#e9edef;border-radius:0 calc(9px * var(--chat-scale)) calc(9px * var(--chat-scale)) calc(9px * var(--chat-scale))}
+.cs-root .phone.whatsapp-dark .storyChat .from-sender .bubble{background:#005c4b;color:#e9edef;border-radius:calc(9px * var(--chat-scale)) 0 calc(9px * var(--chat-scale)) calc(9px * var(--chat-scale))}
+.cs-root .phone.whatsapp-light .storyChat .chatMessages,.cs-root .phone.whatsapp-dark .storyChat .chatMessages{background-size:calc(90px * var(--chat-scale)) calc(90px * var(--chat-scale));background-image:var(--wa-pat-light)}
+.cs-root .phone.whatsapp-dark .storyChat .chatMessages{background-color:#0b141a;background-blend-mode:normal;background-image:var(--wa-pat-dark)}
+.cs-root .phone.whatsapp-light .storyChat .chatMessages{background-color:#efeae2}
+.cs-root .phone .storyChat .bubbleLine{position:relative}
+.cs-root .phone.whatsapp-light .storyChat .bubbleLine:not(.from-sender) .bubble::before,.cs-root .phone.whatsapp-dark .storyChat .bubbleLine:not(.from-sender) .bubble::before{content:'';position:absolute;left:calc(-4px * var(--chat-scale));top:0;border-top:calc(7px * var(--chat-scale)) solid var(--incoming-tail);border-left:calc(5px * var(--chat-scale)) solid transparent}
+.cs-root .phone.whatsapp-light .storyChat .bubbleLine.from-sender .bubble::after,.cs-root .phone.whatsapp-dark .storyChat .bubbleLine.from-sender .bubble::after{content:'';position:absolute;right:calc(-4px * var(--chat-scale));top:0;border-top:calc(7px * var(--chat-scale)) solid var(--outgoing-tail);border-right:calc(5px * var(--chat-scale)) solid transparent}
+.cs-root .phone.whatsapp-light{--incoming-tail:#fff;--outgoing-tail:#d9fdd3}
+.cs-root .phone.whatsapp-dark{--incoming-tail:#202c33;--outgoing-tail:#005c4b}
+.cs-root .phone .storyChat .messageCopy{vertical-align:baseline}
+.cs-root .phone .storyChat .waMeta{display:inline-flex;gap:calc(2px * var(--chat-scale));white-space:nowrap;align-items:center;vertical-align:baseline;font-size:calc(6.5px * var(--chat-scale));color:#667781;margin-left:calc(7px * var(--chat-scale));transform:translateY(calc(2px * var(--chat-scale)))}
+.cs-root .phone.whatsapp-dark .storyChat .waMeta{color:#a4b6bb}
+.cs-root .phone .storyChat .waTicks{color:#53bdeb;font-size:calc(9px * var(--chat-scale));letter-spacing:calc(-4px * var(--chat-scale));padding-right:calc(4px * var(--chat-scale))}
+.cs-root .phone .storyChat .waTicks::before{content:'✓✓'}
+.cs-root .phone .playerControls{z-index:4}
+.cs-root .phone .storyChat + .playerControls{pointer-events:auto}
+@keyframes cs-message-appear{from{opacity:0;transform:translateY(calc(10px * var(--chat-scale))) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.cs-root .themeShot.whatsapp-light .themeTop{background:#f8f9fa;color:#111b21}
+.cs-root .themeShot.whatsapp-dark .themeTop{background:#202c33;color:#e9edef}
+.cs-root .themeShot.whatsapp-light .sampleMessages{background-color:#efeae2;background-image:var(--wa-pat-light);background-size:120px}
+.cs-root .themeShot.whatsapp-dark .sampleMessages{background-color:#0b141a;background-image:var(--wa-pat-dark);background-size:120px}
+.cs-root .themeShot.whatsapp-light .sampleBub.out{background:#d9fdd3;border-radius:12px 3px 12px 12px}
+.cs-root .themeShot.whatsapp-dark .sampleBub.out{background:#005c4b;border-radius:12px 3px 12px 12px}
+.cs-root .themeShot.whatsapp-dark .sampleBub.in{background:#202c33;border-radius:3px 12px 12px 12px}
+.cs-root .themeShot.whatsapp-light .sampleBub.in{border-radius:3px 12px 12px 12px}
+.cs-root .gameVisual.green{background:#00ff00;color:#043916}
+.cs-root .gameVisual.green .visualIcon{background:#ffffffc9;color:#064b21}
+@media(prefers-reduced-motion:reduce){.cs-root .phone .storyChat{transition:none}.cs-root .phone .storyChat .bubbleLine{animation:none}}
+
+/* v3 compact desktop sizing */
+.cs-root .app{zoom:.9;max-width:min(1552px,calc((100vw - 32px) / .9));margin:17px auto 16px}
+.cs-root .workspace{min-height:600px}.cs-root .panel{height:600px}.cs-root .footer{height:91px;margin-top:24px}.cs-root .inner{padding-top:25px;padding-bottom:20px}
+.cs-root .themeGrid{height:475px;padding-top:23px;gap:18px 11px}.cs-root .themeShot{height:156px}.cs-root .themeCard{gap:10px}
+.cs-root .gameplayGrid{height:477px;padding-top:22px}.cs-root .gameVisual{height:335px}
+.cs-root .phone .storyChat{will-change:auto;overflow:hidden}
+.cs-root .phone .storyChat .chatMessages{overflow-anchor:none!important;scroll-behavior:auto!important;justify-content:flex-start;align-content:start}
+.cs-root .phone .storyChat .bubbleLine{animation:none!important;transition:none!important;transform:none!important}
+.cs-root .phone .storyChat .bubbleLine.entering{animation:cs-only-new-message .30s ease-out both!important}
+@keyframes cs-only-new-message{from{opacity:0}to{opacity:1}}
+.cs-root .fullShade,.cs-root .fullShade:fullscreen{inset:0;width:100vw;height:100dvh;padding:12px;align-items:center;justify-content:center;background:#111925;backdrop-filter:none}
+.cs-root .fullShade .dialog{height:100%;width:100%;display:flex;align-items:center;justify-content:center}
+.cs-root .fullShade .phone.full{width:min(calc((100dvh - 24px)*9/16),calc(100vw - 24px));height:min(calc(100dvh - 24px),calc((100vw - 24px)*16/9));max-height:none;max-width:none;border-radius:14px;--chat-scale:calc(min((100dvh - 24px)*9/16,100vw - 24px) / 256px)}
+.cs-root .fullShade .phone.full .storyChat{width:80%}
+.cs-root .closeFull{z-index:101}
+@media(max-width:830px){.cs-root .app{zoom:1;max-width:none;margin:10px auto}.cs-root .workspace{min-height:0}.cs-root .panel{height:auto}.cs-root .editor{min-height:570px}.cs-root .themeGrid{height:455px}.cs-root .gameplayGrid{height:460px}.cs-root .previewPanel{min-height:565px}.cs-root .footer{height:auto}}
+
+/* v4 shell */
+.cs-root .app{display:flex;flex-direction:column;min-height:calc((var(--cs-h,100vh) - 28px)/.9);margin:14px auto 14px;}
+.cs-root .workspace{flex:1;min-height:0;align-items:start;}
+.cs-root .footer{flex-shrink:0;margin-top:auto;min-height:91px;}
+.cs-root .editor,.cs-root .previewPanel{background:#fff;}
+.cs-root .editor,.cs-root .previewPanel,.cs-root .footer{box-shadow:0 2px 3px #14264706;}
+.cs-root .allTools{border:0;background:#f3f6fb;border-radius:12px;font-size:15px;display:flex;gap:7px;align-items:center;padding:10px 12px;color:#4e6077;white-space:nowrap;transition:background .22s,transform .22s;}
+.cs-root .allTools:hover{background:#e9eeff;transform:translateX(-2px);}
+.cs-root .stepDivider{height:28px;border-left:1px solid #dfe4ed;margin:0 5px;}
+.cs-root button,.cs-root .pill,.cs-root .themeCard,.cs-root .gameCard,.cs-root .step{transition:background-color .24s ease,border-color .24s ease,color .24s ease,box-shadow .24s ease,transform .24s cubic-bezier(.2,.8,.3,1);}
+.cs-root .navBtn.primaryAction:hover,.cs-root .pill.primary:hover{box-shadow:0 6px 16px #4661f72e;transform:translateY(-1px)}
+.cs-root .footerBtns{margin-left:auto}
+.cs-root .phone .storyChat{overflow-anchor:none}
+.cs-root .phone .storyChat .bubbleLine{overflow-anchor:none!important}
+.cs-root .phone .chatMessages{overflow-anchor:none!important}
+.cs-root .quietInner .pagehead,.cs-root .wyrInner .pagehead{height:57px}
+.cs-root .quietCard{background:#f7f9fd;border:1px solid #e3e8f2;border-radius:18px;margin:28px 2px 0;padding:29px 32px;max-width:760px;min-height:330px}
+.cs-root .quietIcon,.cs-root .timingBadge{width:52px;height:52px;display:grid;place-items:center;background:#e6ecff;color:#3e5cff;border-radius:16px}
+.cs-root .quietCard h2,.cs-root .timingCard h2{font-weight:620;font-size:24px;letter-spacing:-.5px;margin:18px 0 9px}
+.cs-root .quietCard p,.cs-root .timingCard p{color:#6f7d91;font-size:16px;line-height:1.6;max-width:640px;margin:0}
+.cs-root .quietStats{display:flex;margin:25px 0 20px;border-top:1px solid #e2e7f0;border-bottom:1px solid #e2e7f0;padding:20px 0;gap:50px;flex-wrap:wrap}
+.cs-root .quietStats>div{display:flex;flex-direction:column;gap:7px}.cs-root .quietStats span{font-size:12px;color:#8090a4}.cs-root .quietStats strong{font-size:18px}
+.cs-root .quietPreview{display:flex;align-items:center;gap:8px;padding:11px 16px;border-radius:12px;border:1px solid #ccd9ff;background:white;color:#395aff;font-weight:650;font-size:15px}
+.cs-root .quietFine{margin:22px 4px;color:#8a95a4;font-size:13px}
+.cs-root .timingCard{display:flex;gap:21px;align-items:flex-start;padding:23px 10px 15px}.cs-root .timingCard h2{margin:0 0 7px}.cs-root .timingList{padding:3px 10px 8px;max-width:700px}.cs-root .timingRow{padding:17px 0;border-bottom:1px solid #eaedf3}.cs-root .timingTop{display:flex;justify-content:space-between;font-size:16px;margin-bottom:13px}.cs-root .timingTop output{font-weight:650;color:#3c5cff}.cs-root .timingRow input{width:100%;accent-color:#4362ff;cursor:pointer}.cs-root .silenceNotice{display:flex;align-items:center;gap:8px;margin:16px 10px 20px;font-size:13px;color:#64748b}
+.cs-root .wyrInner{display:flex;flex-direction:column}
+.cs-root .questionCount{font-size:13px;color:#6e7a8f;background:#f5f7fa;padding:9px 12px;border-radius:15px}
+.cs-root .questionScroller{overflow-y:auto;flex:1;min-height:0;padding:23px 2px 8px 0;scrollbar-width:thin;scrollbar-color:#d3ddeb transparent}
+.cs-root .questionCard{border:1px solid #e0e4eb;border-radius:17px;padding:16px 16px 14px;margin-bottom:15px;background:#fff;transition:border .2s,box-shadow .2s}
+.cs-root .questionCard:focus-within{border-color:#bccaff;box-shadow:0 0 0 2px #e8edff}
+.cs-root .questionTop{font-size:16px;color:#303741;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cs-root .qNumber{font-size:11px;color:#adb4c1;letter-spacing:.08em;font-weight:700}
+.cs-root .questionLine{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 40px;gap:10px;align-items:center}
+.cs-root .qChoiceField{height:49px;border:1px solid #dfe3ea;box-shadow:0 1px 2px #1118270d;border-radius:9px;display:flex;align-items:center;padding:0 9px;gap:8px;min-width:0}
+.cs-root .qChoiceField:focus-within{border-color:#5781ff}.cs-root .qChoiceField input{border:0;outline:0!important;min-width:0;flex:1;background:none;font-size:17px;color:#1c2532}
+.cs-root .qDot{height:8px;width:8px;border-radius:50%;flex:none}.cs-root .qDot.red{background:#f33327}.cs-root .qDot.blue{background:#0788d9}
+.cs-root .questionTrash{width:40px;height:40px}
+.cs-root .questionMore{display:flex;align-items:center;gap:10px;margin-top:11px}
+.cs-root .toggleLabel{font-size:16px}
+.cs-root .addQuestion{flex-shrink:0;margin-top:12px}
+.cs-root .phone.wyrPhone{background:#e90804!important;--wyr-red:#e90904;--wyr-blue:#0687d4;isolation:isolate}
+.cs-root .wyrStages{position:absolute;inset:0;overflow:hidden;border-radius:inherit}
+.cs-root .wyrHalf{width:100%;height:50%;position:absolute;left:0;color:white;display:flex;justify-content:center;align-items:center;text-align:center;overflow:hidden}
+.cs-root .wyrTop{top:0;background:var(--wyr-red)}.cs-root .wyrBottom{bottom:0;background:var(--wyr-blue)}
+.cs-root .wyrHalf .wyrChoice{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;padding:0 8%;will-change:opacity,transform;opacity:0;}
+.cs-root .wyrOverline{font-size:3.7cqw;font-weight:750;letter-spacing:.16em;color:#ffffffc7}
+.cs-root .wyrOption{font-size:8cqw;line-height:1.17;font-weight:780;letter-spacing:-.035em;overflow-wrap:break-word;word-break:normal;max-width:100%;text-wrap:balance}
+.cs-root .wyrVote{display:flex;align-items:center;flex-direction:column;gap:9px;opacity:0;will-change:opacity,transform}
+.cs-root .wyrVote strong{font-size:12cqw;font-weight:780;letter-spacing:-.06em}
+.cs-root .wyrMiddle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:18cqw;height:18cqw;max-width:100px;max-height:100px;background:#050505;color:#fff;border-radius:50%;display:grid;place-items:center;z-index:2;border:0;box-shadow:0 0 0 3px #00000015;font-size:6cqw;line-height:1;font-weight:900}
+.cs-root .wyrMiddle::before,.cs-root .wyrMiddle::after{content:'';position:absolute;top:50%;width:calc(50cqw - 9cqw);height:2px;background:#050505;transform:translateY(-50%)}
+.cs-root .wyrMiddle::before{right:100%}.cs-root .wyrMiddle::after{left:100%}
+.cs-root .wyrMiddle.isCounting{background:#111;box-shadow:0 0 0 5px #ffffff30}
+.cs-root .wyrMiddle.isCounting>span{animation:cs-counter-pop .38s ease-out}
+@keyframes cs-counter-pop{from{transform:scale(.7)}to{transform:scale(1)}}
+.cs-root .wyrQuestionTag{position:absolute;top:3.5%;left:50%;transform:translateX(-50%);color:#ffffffce;font-size:3.4cqw;letter-spacing:.16em;font-weight:650;white-space:nowrap}
+.cs-root .wyrPhone .playerControls{z-index:4}
+.cs-root .wyrPhone .wyrSeek{cursor:pointer}
+.cs-root .exportDialog .modalBrandIcon{height:47px;width:47px;display:grid;place-items:center;border-radius:13px;background:#eaf0ff;color:#4564ff;margin-bottom:17px}
+.cs-root .exportDialog h3{font-size:25px;letter-spacing:-.7px}.cs-root .exportDialog p{color:#738095;margin-top:9px}
+.cs-root .exportSpecs{display:flex;flex-wrap:wrap;gap:9px;margin:20px 0 14px}.cs-root .exportSpecs>span{display:flex;align-items:center;gap:5px;font-size:12px;color:#3d5071;border:1px solid #e1e7f1;background:#f8faff;border-radius:10px;padding:9px 10px}
+.cs-root .exportSpecs .i{color:#4564ff}.cs-root .exportDialog .noAudioInfo{font-size:12px;color:#8d96a6}
+.cs-root .exportStatus{display:flex;flex-direction:column;align-items:center;padding:23px 0 5px}
+.cs-root .ringWrap{position:relative;width:95px;height:95px}.cs-root .exportRing{width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
+.cs-root .exportRing circle{fill:none;stroke-width:7}.cs-root .ringBack{stroke:#e7ecf8}.cs-root .ringMeter{stroke:#3c5cff;stroke-linecap:round;stroke-dasharray:226.2;stroke-dashoffset:226.2;transition:stroke-dashoffset .25s ease}
+.cs-root .ringWrap:before{content:'';width:9px;height:9px;background:#5c7bff;border-radius:100%;position:absolute;top:1px;left:44px;animation:cs-orbit 1.3s linear infinite;transform-origin:3px 46px}
+@keyframes cs-orbit{to{transform:rotate(360deg)}}
+.cs-root #ringPct{position:absolute;inset:0;display:grid;place-items:center;font-size:22px;font-weight:700;color:#2c4164}
+.cs-root .exportTaskLabel{font-size:13px;color:#697a95;margin-top:9px}.cs-root .exportStatus .exportProgress{width:80%;margin-top:13px}
+@media(max-width:1200px){.cs-root .steps .step{font-size:14px}}
+@media(max-width:1000px){.cs-root .steps .step{font-size:14px}.cs-root .stepIcon{width:34px;height:34px}.cs-root .steps{gap:7px}.cs-root .allTools{font-size:13px}}
+@media(max-width:830px){.cs-root .app{display:block;min-height:0;margin:10px auto;zoom:1}.cs-root .footer{margin-top:15px}.cs-root .wyrEditor{min-height:600px}.cs-root .questionScroller{min-height:405px}.cs-root .questionLine{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 38px;gap:5px}.cs-root .questionCard{padding:12px}.cs-root .qChoiceField input{font-size:14px}.cs-root .optionBpercent,.cs-root .voteDescriptor{display:none}.cs-root .phone.wyrPhone{flex-shrink:0}}
+@media(max-width:600px){.cs-root .questionLine{grid-template-columns:1fr 1fr 34px}.cs-root .questionTrash{width:32px;height:32px}.cs-root .questionCard{padding:10px}.cs-root .qDot{display:none}.cs-root .qChoiceField{padding:0 7px}.cs-root .qChoiceField input{font-size:13px}.cs-root .footer .allTools{padding:7px 8px}.cs-root .footer .stepDivider{display:none}}
+@media(min-width:831px){.cs-root .workspace{align-items:start}.cs-root .panel{height:min(690px,calc((var(--cs-h,100vh) - 126px)/.9))}.cs-root .editor .inner{height:100%}.cs-root .messageList{height:clamp(174px,calc((var(--cs-h,100vh) - 700px)/.9 + 174px),260px)}.cs-root .themeGrid{height:calc(100% - 66px)}.cs-root .gameplayGrid{height:calc(100% - 66px)}}
+
+/* v5 selected */
+.cs-root .app.clipperMode{margin-top:14px}
+.cs-root .voteSliderWrap{flex:1;min-width:130px;max-width:430px}.cs-root .voteSliderLabels{display:flex;justify-content:space-between;gap:15px;color:#536176;font-size:12px;font-weight:700;margin-bottom:8px}.cs-root .voteSliderLabels span{display:flex;gap:6px;align-items:center}.cs-root .voteSliderLabels b{font-size:15px;color:#1c283a}.cs-root .voteSliderLabels i{height:9px;width:9px;border-radius:50%;display:inline-block;background:#fa595d}.cs-root .voteSliderLabels .sliderB i{background:#3986f7}
+.cs-root .voteRange{appearance:none;-webkit-appearance:none;width:100%;height:7px;border-radius:99px;background:linear-gradient(to right,#f2777c 0%,#f2777c var(--fill),#6d9cf8 var(--fill),#6d9cf8 100%);outline:none;cursor:pointer;margin:3px 0 4px}.cs-root .voteRange::-webkit-slider-thumb{-webkit-appearance:none;height:22px;width:22px;border:4px solid #fff;border-radius:50%;background:#3e62f6;box-shadow:0 1px 8px #243d7955}.cs-root .voteRange::-moz-range-thumb{height:16px;width:16px;border:4px solid white;border-radius:50%;background:#3e62f6;box-shadow:0 1px 8px #243d7955}
+.cs-root .wyrVote.isWinner strong{color:#56ff9b!important}.cs-root .wyrVote.isLoser strong{color:#ff636e!important}
+.cs-root .phone .storyChat .chatMessages{flex:none!important;min-height:0!important;overflow-y:hidden!important;overflow-x:hidden!important;scroll-behavior:auto!important;scrollbar-width:none!important;overflow-anchor:none!important;display:block!important}
+.cs-root .phone .storyChat .bubbleLine{animation:none!important;transition:none!important;position:relative!important;will-change:auto!important;}
+.cs-root .phone .storyChat .bubbleLine.entering{animation:cs-only-new-message .29s ease-out both!important;}
+.cs-root .phone .storyChat{overflow:hidden!important;transition:height .47s cubic-bezier(.22,.8,.2,1);}
+.cs-root .app.clipperMode .workspace{display:block;min-height:630px}.cs-root .app.clipperMode .workspace #right{display:none}.cs-root .app.clipperMode .workspace #editor{height:max(630px,calc((var(--cs-h,100vh) - 142px)/.9));max-width:none;width:100%}
+.cs-root .clipperPage{height:100%;padding:27px 32px 23px;display:flex;flex-direction:column;overflow:hidden}
+.cs-root .clipperPageHeader{flex-shrink:0;border-bottom:1px solid #e9edf5;padding-bottom:17px;margin-bottom:18px}.cs-root .clipBreadcrumb{color:#8e9aaf;font-size:10px;letter-spacing:1.8px;font-weight:750}.cs-root .clipBreadcrumb span{margin:0 9px;color:#b1bacb}.cs-root .clipperPageHeader h1{color:#1c2432;font-size:27px;letter-spacing:-.95px;font-weight:680;margin:10px 0 6px}.cs-root .clipperPageHeader p{font-size:13px;color:#8490a4;margin:0}
+.cs-root .clipFormats{display:flex;gap:5px;margin-top:10px}.cs-root .clipFormats button{background:white;border:1px solid #e0e5ec;border-radius:10px;flex:1;padding:8px 3px;font-size:13px;font-weight:800}.cs-root .clipFormats button small{display:block;color:#9aa5b6;font-size:9px;margin-top:5px;font-weight:500}.cs-root .clipFormats button.chosen{border-color:#6885f2;color:#315bec;background:#f5f7ff}
+
+/* v6 selected */
+.cs-root .rangeTrack{bottom:8px;height:6px;overflow:visible}.cs-root .rangeFill{pointer-events:none}
+.cs-root .transportSeek{position:absolute;inset:-9px 0;width:100%;height:24px;margin:0;opacity:.02;appearance:none;-webkit-appearance:none;cursor:pointer;background:transparent;touch-action:none}
+.cs-root .transportSeek::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;height:26px;cursor:ew-resize}.cs-root .transportSeek:focus-visible{outline:2px solid white;outline-offset:2px;border-radius:12px}
+.cs-root .wyrVote strong{background:transparent!important;box-shadow:none!important;padding:0!important;border-radius:0!important;text-shadow:0 2px 6px #18213a66!important}
+.cs-root .wyrVoteBar{display:none!important}.cs-root .wyrVote.isLoser strong{-webkit-text-stroke:.45px #ffced2;text-shadow:0 2px 6px #1a0b1c55!important}
+.cs-root .clipVisualHolder{flex:1;min-height:0;min-width:0;max-width:100%;width:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.cs-root .clipVisualFrame{position:relative;max-height:100%;max-width:100%;width:auto;height:100%;aspect-ratio:9/16;background:linear-gradient(155deg,#192540,#080c16);overflow:hidden;flex:none;border-radius:11px;box-shadow:0 8px 30px #0004}
+.cs-root .clipVisualFrame.ratio-1-1{aspect-ratio:1/1}.cs-root .clipVisualFrame.ratio-16-9{aspect-ratio:16/9}
+.cs-root .clipVisualFrame video,.cs-root .clipVisualFrame iframe{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:none;object-fit:cover;border:0}
+.cs-root .clipVisualFrame iframe{object-fit:fill}
+.cs-root .clipTransport{width:min(100%,680px);flex:none;min-height:35px;display:flex;align-items:center;gap:10px;color:#fff}.cs-root .clipTransport button{color:#e7eefa;flex:none;border:0;background:#ffffff1b;border-radius:9px;width:35px;height:35px;display:grid;place-items:center}
+
+/* v7 selected */
+.cs-root button,.cs-root select,.cs-root input{transition:border-color .17s cubic-bezier(.2,.8,.3,1),background-color .17s,box-shadow .19s}
+.cs-root button:active:not(:disabled){filter:brightness(.97)}
+.cs-root .clipperPageHeader{margin-bottom:16px;padding-bottom:15px}.cs-root .clipperPageHeader h1{font-size:26px;font-weight:690;letter-spacing:-.9px}.cs-root .clipperPageHeader p{font-size:12px;color:#8691a3}
+.cs-root .mockStage{background:#f0f4fa;border:1px solid #e1e7f0;border-radius:14px;flex:1;min-height:230px;min-width:0;display:flex;align-items:center;flex-direction:column;justify-content:center;padding:12px;gap:8px;overflow:hidden}.cs-root .mockCanvasHolder{display:flex;justify-content:center;align-items:center;width:100%;min-height:0;flex:1;overflow:hidden}.cs-root .mockVideoShell{background:#fff;position:relative;height:100%;width:auto;max-width:100%;max-height:100%;aspect-ratio:9/16;border-radius:10px;overflow:hidden;border:1px solid #e0e7f0;box-shadow:0 10px 22px #263e6516;transition:width .35s cubic-bezier(.22,.8,.2,1),height .35s,aspect-ratio .35s}.cs-root .mockVideoShell.ratio-1-1{aspect-ratio:1/1}.cs-root .mockVideoShell.ratio-16-9{aspect-ratio:16/9}
+.cs-root .mockStage:fullscreen{width:100vw;height:100dvh;max-width:none;border-radius:0;padding:25px}
+.cs-root .v7PresetText{font-family:Impact,Arial,sans-serif;font-size:19px;font-weight:900;color:#fff;-webkit-text-stroke:1px #15151b;text-shadow:1px 1px #15151b}.cs-root .v7PresetText.style-yellow{color:#fff236}.cs-root .v7PresetText.style-mint{color:#a5ffdd}.cs-root .v7PresetText.style-violet{color:#a449f8;-webkit-text-stroke:0}.cs-root .v7PresetText.style-cyan{color:#43d7f0}.cs-root .v7PresetText.style-neon{color:#42fa9b;-webkit-text-stroke:0}.cs-root .v7PresetText.style-simple{color:#202b3e;-webkit-text-stroke:0;text-shadow:none}
+@keyframes cs-v7PageIn{from{opacity:0;transform:translateY(9px) scale(.995);filter:blur(2px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}.cs-root .pageEnter{animation:cs-v7PageIn .38s cubic-bezier(.18,.82,.24,1) both}.cs-root .stepIcon{transition:background .32s,color .32s,transform .32s cubic-bezier(.2,.8,.3,1)}.cs-root .step.current .stepIcon{transform:scale(1.065)}.cs-root .footer{box-shadow:0 5px 18px #18284605}.cs-root .navBtn{transition:transform .22s,box-shadow .22s,background .2s}.cs-root .navBtn:hover{transform:translateY(-2px);box-shadow:0 6px 16px #203c8312}.cs-root .navBtn.primaryAction:hover{box-shadow:0 9px 21px #3b58ed30}
+.cs-root .exportDialog{border-radius:24px;box-shadow:0 28px 75px #17234520;padding:32px;width:min(535px,96vw)}.cs-root .exportDialog .modalBrandIcon{border-radius:16px;background:linear-gradient(135deg,#ebf1ff,#e5edff);width:52px;height:52px}.cs-root .exportStatus{background:linear-gradient(180deg,#f8faff,#fff);border:1px solid #ecf0f8;border-radius:19px;padding:24px 0 18px;margin:18px 0 4px}.cs-root .ringWrap{width:114px;height:114px;filter:drop-shadow(0 8px 15px #5776dc16)}.cs-root .ringBack{stroke:#e5ecfc}.cs-root .ringMeter{stroke:#4268ff;transition:stroke-dashoffset .35s cubic-bezier(.18,.82,.24,1)}.cs-root .ringWrap:before{width:9px;height:9px;top:11px;left:52px;background:#7c9aff;transform-origin:4px 46px;box-shadow:0 0 0 4px #dfe9ff;animation:cs-orbit 1.8s linear infinite}.cs-root .ringWrap:after{content:'';position:absolute;inset:12px;border:1px solid #f0f3fc;border-radius:50%;pointer-events:none}.cs-root #ringPct{font-size:24px;font-weight:750;letter-spacing:-1px;color:#2443a3}.cs-root .exportTaskLabel{margin-top:14px;font-weight:600;color:#5b6c86}.cs-root .exportStatus .exportProgress{border-radius:99px;overflow:hidden;background:#e8edfa;height:6px}.cs-root .exportStatus .exportProgress>div{background:linear-gradient(90deg,#537dff,#3447ed);border-radius:99px;transition:width .33s cubic-bezier(.2,.8,.3,1)}
+@media(prefers-reduced-motion:reduce){.cs-root .pageEnter{animation:none}.cs-root .ringWrap:before{animation:none}}
+
+/* v8 */
+.cs-root .app.clipperMode{--appleLine:#e8e8ed;--appleText:#1d1d1f;--appleSecondary:#86868b;--appleBlue:#007aff;--appleFill:#f5f5f7;color:var(--appleText)}
+.cs-root .app.clipperMode .workspace #editor{background:#fff;border:1px solid #e6e7ec;border-radius:22px;box-shadow:0 4px 28px #26304706}
+.cs-root .app.clipperMode .footer{border:1px solid #e7e7ec;border-radius:21px;background:#fff;box-shadow:0 4px 24px #262a3505}
+.cs-root .app.clipperMode .footer .allTools{color:#6a6a70;background:#f5f5f7;border:0;border-radius:10px}
+.cs-root .app.clipperMode .footer .step{font-size:15px;font-weight:540;gap:9px;letter-spacing:-.2px;color:#6e6e73}
+.cs-root .app.clipperMode .footer .step.current{color:#1d1d1f}
+.cs-root .app.clipperMode .footer .stepIcon{width:34px;height:34px;border-radius:12px;background:#f4f4f6;color:#6e6e73;transform:none}
+.cs-root .app.clipperMode .footer .step.current .stepIcon{background:#e7f1ff;color:#007aff;transform:none}
+.cs-root .app.clipperMode .footer .stepSep{font-size:18px;color:#bfc0c4}
+.cs-root .app.clipperMode .navBtn{height:49px;min-width:100px;font-size:15px;font-weight:570;gap:9px}
+.cs-root .app.clipperMode .navBtn.primaryAction{background:#007aff;border:1px solid #007aff;box-shadow:none}
+.cs-root .app.clipperMode .navBtn.primaryAction:hover{background:#006ee6;box-shadow:0 3px 12px #007aff26}
+.cs-root .app.clipperMode .navBtn:not(.primaryAction){border-color:#e1e1e6}
+.cs-root .applePageHeader{padding:0 0 23px!important;margin:0 0 22px!important;height:auto;min-height:110px;border-bottom:1px solid #ededf0}
+.cs-root .appleHeaderTop{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}
+.cs-root .applePageHeader .clipBreadcrumb{font-size:12px;font-weight:550;letter-spacing:0;color:#9a9ba1;display:flex;align-items:center;gap:8px}
+.cs-root .applePageHeader .clipBreadcrumb span{margin:0;color:inherit}
+.cs-root .applePageHeader .clipBreadcrumb span:last-child{color:#636368}
+.cs-root .appleCrumbChevron{display:inline-flex;align-items:center}.cs-root .appleCrumbChevron .i{width:13px;height:13px;color:#b2b2b8}
+.cs-root .appleStepCount{font-size:11px;color:#8b8b92;letter-spacing:.01em;background:#f5f5f7;border-radius:99px;padding:7px 12px;font-weight:580;white-space:nowrap}
+.cs-root .applePageHeader h1{color:#1d1d1f;font-size:30px;font-weight:650;letter-spacing:-1.05px;line-height:1.15;margin:0 0 6px}
+.cs-root .applePageHeader p{color:#86868b;font-size:13.5px;font-weight:420;margin:0;line-height:1.4}
+.cs-root .appleImportLayout,.cs-root .appleWorkLayout{flex:1;min-height:0;display:grid;gap:21px}
+.cs-root .appleImportLayout{grid-template-columns:minmax(0,.97fr) minmax(0,1.03fr)}
+.cs-root .appleWorkLayout{grid-template-columns:minmax(0,1.12fr) minmax(350px,.7fr)}
+.cs-root .appleSourceSurface,.cs-root .appleImportViewer,.cs-root .appleWorkspacePreview,.cs-root .appleSettingsSide,.cs-root .appleCaptionSettings,.cs-root .appleMotionSettings{border:1px solid var(--appleLine);border-radius:19px;min-width:0;min-height:0;overflow:hidden;background:#fff;display:flex;flex-direction:column;padding:19px}
+.cs-root .appleUpload{border:1px dashed #d7d7df;border-radius:15px;background:#fafafb;min-height:0;flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0;text-align:center;cursor:pointer;padding:19px 12px;transition:border .24s,background .24s,box-shadow .24s}
+.cs-root .appleUpload:hover,.cs-root .appleUpload.dragActive{background:#f6f9ff;border-color:#007aff;box-shadow:inset 0 0 0 1px #007aff0a}
+.cs-root .appleUpload h2{font-size:17px;color:#1d1d1f;font-weight:620;letter-spacing:-.5px;margin:0 0 5px}
+.cs-root .appleUpload p{font-size:12px;color:#86868b;line-height:1.5;margin:0 0 14px}
+.cs-root .appleUpload .appleBrowse{height:35px;border:1px solid #dedee4;background:#fff;border-radius:10px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:5px;color:#303039;font-weight:600;transition:border .2s,box-shadow .2s}
+.cs-root .appleBrowse:hover{border-color:#a6a6b0;box-shadow:0 2px 8px #00000008}
+.cs-root .appleUpload small{font-size:10px;color:#a3a3aa;margin-top:10px}
+.cs-root .youtubeBrandSVG{width:23px;height:17px;flex:none}
+.cs-root .appleImportViewer{background:#fff}.cs-root .appleVideoWell{display:flex;flex-direction:column;min-height:0;flex:1;background:#f5f5f7;border-radius:15px;overflow:hidden;padding:10px;align-items:center;justify-content:center}
+.cs-root .appleImportViewer .clipVisualHolder{flex:1;width:100%;min-height:0}.cs-root .appleImportViewer .clipVisualFrame{border-radius:10px;background:#f5f5f7;box-shadow:none;max-height:100%;max-width:100%;width:100%;height:100%;aspect-ratio:auto;display:grid;place-items:center}
+.cs-root .appleImportViewer .clipVisualFrame video{object-fit:contain}
+.cs-root .appleImportViewer .clipVisualFrame iframe{object-fit:fill}
+.cs-root .appleImportViewer .clipTransport{background:transparent;color:#333337;width:100%;max-width:none;min-height:39px;padding:0;margin:6px 0 0;gap:8px}
+.cs-root .appleImportViewer .clipTransport button{height:30px;width:30px;background:#fff;border:1px solid #e1e1e6;color:#34343a;border-radius:8px}
+.cs-root .appleVideoWell:fullscreen{width:100vw;height:100dvh;border-radius:0;padding:16px;background:#f5f5f7}
+.cs-root .appleVideoWell:fullscreen .clipVisualFrame{max-height:calc(100dvh - 62px)}
+.cs-root .appleWorkspacePreview{background:#fff}.cs-root .appleWorkspacePreview .blankPreviewStage{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;background:#f5f5f7;border:1px solid #efeff2;border-radius:15px;padding:13px;gap:12px;overflow:hidden}
+.cs-root .appleWorkspacePreview .mockCanvasHolder{min-height:0;flex:1;display:flex;align-items:center;justify-content:center;background:transparent;padding:4px}
+.cs-root .appleWorkspacePreview .mockVideoShell{background:#fff!important;background-image:none!important;border:1px solid #e7e7ec;border-radius:10px;box-shadow:0 2px 10px #25253008!important;max-height:100%;height:100%;max-width:100%;width:auto;aspect-ratio:9/16;position:relative;overflow:hidden}
+.cs-root .appleWorkspacePreview .mockVideoShell.ratio-1-1{aspect-ratio:1/1}.cs-root .appleWorkspacePreview .mockVideoShell.ratio-16-9{aspect-ratio:16/9}
+.cs-root .appleWorkspacePreview .blankPreviewStage:fullscreen{width:100vw!important;height:100dvh!important;max-width:none;border-radius:0;background:#f5f5f7}
+.cs-root .appleWorkspacePreview .blankPreviewStage:fullscreen .mockCanvasHolder{max-height:calc(100dvh - 80px)}
+.cs-root .appleFileSummary{display:flex;align-items:center;gap:11px;padding:12px;background:#f7f7f9;border-radius:13px;margin-bottom:18px}
+.cs-root .appleFileIcon{width:34px;height:34px;border-radius:10px;background:#fff;display:grid;place-items:center;color:#686870;flex:none}
+.cs-root .appleFileSummary>div{min-width:0}.cs-root .appleFileSummary strong{font-size:12px;font-weight:630;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#29292f}.cs-root .appleFileSummary small{color:#929299;font-size:10px;display:block;margin-top:4px}
+.cs-root .appleInfoNotice{border:1px solid #eaeaf1;border-radius:12px;background:#f8f8fa;color:#777780;line-height:1.6;font-size:12px;padding:15px}
+.cs-root .appleAspectPicker{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.cs-root .appleAspectPicker button{min-width:0;padding:11px 2px;border:1px solid #e5e5eb;border-radius:11px;background:#fafafb;color:#4b4b52;font-size:12px;font-weight:625;display:flex;flex-direction:column;align-items:center;gap:3px}
+.cs-root .appleAspectPicker button small{font-size:9px;font-weight:450;color:#9999a1}
+.cs-root .appleAspectPicker button.chosen{background:#eef6ff;border-color:#80bcff;box-shadow:inset 0 0 0 1px #bee0ff;color:#007aff}
+.cs-root .appleCaptionSettings,.cs-root .appleMotionSettings{padding:19px 20px}
+.cs-root .appleTextField{min-width:0;flex:1;height:40px;border:1px solid #dedee4;border-radius:10px;background:#fff;padding:0 12px;font-size:12px;color:#242429;outline:none}
+.cs-root .appleTextField:focus{border-color:#007aff;box-shadow:0 0 0 3px #007aff14}
+.cs-root .appleCaptionSettings .appleTextField{width:100%;min-height:40px;display:block}
+.cs-root .applePresetGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.cs-root .applePreset{min-width:0;min-height:67px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:1px solid #e8e8ed;border-radius:12px;background:#fafafb;position:relative;color:#77777e;font-size:10px;transition:border-color .17s,background .17s,transform .18s}
+.cs-root .applePreset:hover{border-color:#b8d9ff;background:#f7faff;transform:translateY(-1px)}
+.cs-root .applePreset.chosen{background:#eff7ff;border-color:#72baff;box-shadow:inset 0 0 0 1px #bcdfff;color:#006ee6}
+.cs-root .applePreset .v7PresetText{font-size:22px}.cs-root .applePreset i{position:absolute;right:5px;top:4px;color:#007aff;line-height:1}.cs-root .applePreset i .i{width:12px;height:12px}
+.cs-root .appleTwoFields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.cs-root .appleColorRow{display:flex;flex-direction:column;gap:7px;min-width:0;font-size:11px;color:#686870}.cs-root .appleColorRow>span:last-child{height:38px;border:1px solid #e4e4e9;border-radius:10px;display:flex;align-items:center;gap:8px;padding:0 9px}
+.cs-root .appleColorRow input[type=color]{width:30px;height:27px;border:0;padding:0;cursor:pointer;background:none}.cs-root .appleColorRow output{font-size:10px;color:#888891;font-variant-numeric:tabular-nums}
+.cs-root .applePositionOptions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.cs-root .applePosition{min-width:0;border:1px solid #e6e6eb;border-radius:13px;background:#fafafb;color:#68686e;display:flex;align-items:center;flex-direction:column;gap:7px;padding:13px 6px;position:relative;font-size:12px}
+.cs-root .applePosition.chosen,.cs-root .appleMode.chosen{background:#f0f7ff;border-color:#8cc3ff;box-shadow:inset 0 0 0 1px #b8dcff;color:#007aff}
+.cs-root .applePositionDiagram{display:block;width:34px;height:54px;background:#fff;border:1px solid #dedee3;border-radius:6px;position:relative}.cs-root .applePositionBar{position:absolute;background:#007aff;border-radius:4px;height:4px;left:7px;right:7px}.cs-root .applePositionBar.bar-top{top:8px}.cs-root .applePositionBar.bar-middle{top:24px}.cs-root .applePositionBar.bar-bottom{bottom:8px}
+.cs-root .applePosition>svg{position:absolute;right:5px;top:5px;width:13px;height:13px}
+.cs-root .appleModeOptions{display:flex;flex-direction:column;gap:9px}.cs-root .appleMode{display:flex;align-items:center;justify-content:space-between;text-align:left;gap:8px;padding:15px;border:1px solid #e5e5eb;background:#fafafb;border-radius:13px}
+.cs-root .appleMode strong{display:block;font-size:12px;color:#323238;font-weight:640}.cs-root .appleMode small{display:block;font-size:11px;color:#919197;margin-top:5px;font-weight:400;line-height:1.4}.cs-root .appleMode svg{opacity:0;color:#007aff;flex:none}.cs-root .appleMode.chosen svg{opacity:1}
+.cs-root .app.clipperMode .pageEnter{animation:cs-applePageEnter .32s cubic-bezier(.22,.8,.3,1) both}
+@keyframes cs-applePageEnter{from{opacity:.1;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.cs-root .app.clipperMode button:focus-visible,.cs-root .app.clipperMode input:focus-visible,.cs-root .app.clipperMode select:focus-visible{outline:2px solid #007aff;outline-offset:2px}
+@media(max-width:1200px){.cs-root .appleWorkLayout{grid-template-columns:minmax(0,1fr) minmax(300px,.8fr)}.cs-root .appleImportLayout{gap:14px}}
+@media(prefers-reduced-motion:reduce){.cs-root .app.clipperMode .pageEnter{animation:none}.cs-root .appleUpload,.cs-root .applePreset{transition:none}}
+
+/* v9 */
+.cs-root .app.clipperMode{--appleBlue:#405dff;--appleLine:#e5e8ed;--appleText:#17191f;--appleSecondary:#7b8492;--appleFill:#f7f9fc;color:#16191f}
+.cs-root .app.clipperMode .workspace #editor,.cs-root .app.clipperMode .footer{border-color:#e0e4eb;border-radius:20px;box-shadow:0 1px 3px #11213b06}
+.cs-root .app.clipperMode .navBtn.primaryAction{background:linear-gradient(135deg,#4676f8,#3942fe);border-color:transparent;border-radius:28px}
+.cs-root .app.clipperMode .navBtn.primaryAction:hover{background:#3546f5}
+.cs-root .app.clipperMode .footer .step.current .stepIcon{background:#3e5eff;color:white}
+.cs-root .app.clipperMode .footer .stepIcon{border-radius:50%;background:#ebf1ff;color:#283447;width:31px;height:31px}
+.cs-root .app.clipperMode .footer .step{font-size:13px;gap:7px;white-space:nowrap}
+.cs-root .app.clipperMode .footer .stepSep{color:#acb6c5;font-size:16px}
+.cs-root .app.clipperMode .footer .stepDivider{background:#e5e8ee}
+.cs-root .app.clipperMode .navBtn{height:45px;min-width:99px;font-size:14px}
+.cs-root .appleClipPage.v9Page{padding:25px 29px 25px;gap:0;display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}
+.cs-root .v9Page .applePageHeader{min-height:0;height:auto;padding:0 0 17px!important;margin:0 0 19px!important;border-bottom:1px solid #e7e9ee}
+.cs-root .v9Page .appleHeaderTop{display:none}
+.cs-root .v9Page .applePageHeader h1{font-size:24px;line-height:1.2;font-weight:640;letter-spacing:-.65px;margin:0 0 5px;color:#15171c}
+.cs-root .v9Page .applePageHeader p{font-size:12px;color:#89929f;font-weight:440}
+.cs-root .v9Page .appleImportLayout,.cs-root .v9Page .appleWorkLayout{flex:1;min-height:0;gap:19px}
+.cs-root .v9Page .appleImportLayout{grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr)}
+.cs-root .v9Page .appleWorkLayout{grid-template-columns:minmax(0,1.09fr) minmax(0,.91fr)}
+.cs-root .v9Page .appleSourceSurface,.cs-root .v9Page .appleImportViewer,.cs-root .v9Page .appleSettingsSide,.cs-root .v9Page .appleWorkspacePreview,.cs-root .v9Page .appleCaptionSettings,.cs-root .v9Page .appleMotionSettings{padding:20px 21px;box-shadow:none;border:1px solid #e5e8ee;border-radius:15px;background:#fff;min-height:0;overflow:hidden}
+.cs-root .v9SectionHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex:none;min-height:20px}
+.cs-root .v9SectionHead strong{font-size:14px;font-weight:640;letter-spacing:-.2px;color:#1e2229}
+.cs-root .v9SectionHead>span{font-size:10px;letter-spacing:.02em;color:#9da5b0}
+.cs-root .v9Source{min-width:0}
+.cs-root .v9Drop.appleUpload{border:1.5px dashed #d9e0eb;border-radius:13px;background:#fafcff;flex:1;min-height:0;padding:17px;transition:background .25s,border-color .25s,box-shadow .25s}
+.cs-root .v9Drop.appleUpload:hover,.cs-root .v9Drop.appleUpload.dragActive{border-color:#5f80ff;background:#f4f7ff;box-shadow:inset 0 0 0 1px #9cafff45}
+.cs-root .v9UploadGlyph{width:53px;height:53px;border-radius:17px;background:#eef3ff;color:#3e61e9;display:grid;place-items:center;margin-bottom:13px}
+.cs-root .v9UploadGlyph .i{width:24px;height:24px}
+.cs-root .v9Drop.appleUpload h2{font-size:16px;letter-spacing:-.4px;font-weight:645;margin-bottom:6px}
+.cs-root .v9Drop.appleUpload p{font-size:11.5px;margin-bottom:15px;color:#929ca9;line-height:1.4}
+.cs-root .v9Browse.appleBrowse{background:white;color:#344ef6;border:1px solid #dfe5f3;border-radius:10px;height:38px;padding:0 14px;font-size:12px;font-weight:630;box-shadow:0 1px 2px #121e370a}
+.cs-root .v9Browse.appleBrowse:hover{box-shadow:0 4px 11px #304ca016}
+.cs-root .v9Drop.appleUpload small{margin-top:12px;color:#a0a8b3;font-size:10px}
+.cs-root .v9Divider{display:flex;align-items:center;gap:14px;padding:12px 0;flex:none;color:#b3bbc8}
+.cs-root .v9Divider span{flex:1;height:1px;background:#edf0f4}.cs-root .v9Divider b{font-size:10px;font-weight:560;letter-spacing:.14em}
+.cs-root .v9YouTube{border:1px solid #e5e8ed;border-radius:12px;padding:13px;background:#fff;flex:none}
+.cs-root .v9YouTubeTitle{display:flex;align-items:center;gap:9px;margin-bottom:11px}.cs-root .v9YouTubeTitle .youtubeBrandSVG{width:24px;height:18px}
+.cs-root .v9YouTubeTitle strong{font-size:12px;color:#252933;font-weight:635}.cs-root .v9YouTubeTitle span{font-size:10px;margin-left:auto;color:#9aa3b0}
+.cs-root .v9YouTubeInput{display:flex;align-items:center;gap:7px;min-width:0}
+.cs-root .v9YouTubeInput input{height:37px;min-width:0;flex:1;border:1px solid #e0e5ee;border-radius:9px;padding:0 10px;font-size:11.5px;color:#303643;outline:none}
+.cs-root .v9YouTubeInput input:focus{border-color:#4e70ff;box-shadow:0 0 0 3px #4b70ff1d}
+.cs-root .v9YouTubeInput button{height:37px;border-radius:9px;background:#3d5dfa;color:#fff;display:flex;align-items:center;gap:6px;border:0;padding:0 12px;font-weight:650;font-size:11px;cursor:pointer}
+.cs-root .v9YouTubeInput button:hover{background:#344def}
+.cs-root .v9Privacy{flex:none;display:flex;align-items:center;gap:7px;color:#9ba4b0;font-size:10px;padding:12px 2px 0}
+.cs-root .v9Privacy svg{width:13px;height:13px;color:#5f987a}
+.cs-root .v9Pill{border-radius:8px;background:#f4f6fa;padding:5px 9px;color:#919baa!important;letter-spacing:0!important}
+.cs-root .v9PillReady{background:#eef8f3;color:#397c5d!important}
+.cs-root .v9VideoWell.appleVideoWell{background:#f7f9fc;border:1px solid #edf0f5;border-radius:12px;padding:11px;flex:1;justify-content:center;min-height:0}
+.cs-root .v9PreviewEmpty{background:#f7f9fc;width:100%;height:100%;border-radius:10px}
+.cs-root .v9Viewer .clipVisualFrame{background:#f6f8fc;border-radius:10px;aspect-ratio:16/9!important;position:relative;width:100%;height:auto;max-height:100%;overflow:hidden}
+.cs-root .v9Viewer .clipVisualHolder{width:100%;height:auto;max-height:100%;flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+.cs-root .v9Viewer .clipVisualFrame video,.cs-root .v9Viewer .clipVisualFrame iframe{width:100%;height:100%;object-fit:contain;border:0}
+.cs-root .v9Viewer .v9Transport{margin:7px 0 0;min-height:37px;background:transparent;border:0;width:100%;padding:0;display:flex;align-items:center;gap:9px}
+.cs-root .v9Viewer .clipNowPlaying{margin-right:auto;color:#8a95a4;font-size:11px;display:inline-flex;align-items:center;gap:5px}
+.cs-root .v9Viewer .clipNowPlaying svg{width:13px;height:13px;color:#5e9f7a}
+.cs-root .v9Viewer .clipTransport button{border:1px solid #e2e7ef;color:#647083;border-radius:9px;width:33px;height:33px;background:#fff}
+.cs-root .v9Viewer .clipTransport button:hover{color:#4260ef;background:#eef3ff}
+.cs-root .v9MediaMeta{min-height:18px;flex:none;margin-top:12px;display:flex;align-items:center;justify-content:space-between;font-size:10px;color:#919ba8;gap:10px}
+.cs-root .v9MediaMeta span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:70%}
+.cs-root .v9MediaMeta a{text-decoration:none;color:#4663dc;display:flex;align-items:center;gap:3px;white-space:nowrap}
+.cs-root .v9Settings{display:flex;flex-direction:column;gap:0}
+.cs-root .v9Settings .v9SectionHead{margin-bottom:17px}
+.cs-root .v9FileSummary.appleFileSummary{margin-bottom:15px;padding:11px;border:1px solid #eef1f5;background:#f9faff}
+.cs-root .v9SettingGroup{border-top:1px solid #edf0f4;padding:17px 0 2px;margin-top:0}
+.cs-root .v9SettingGroup:first-of-type{border-top:0}
+.cs-root .v9GroupTitle{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:13px;gap:10px}.cs-root .v9GroupTitle strong{font-size:13px;font-weight:630;color:#2a3038}.cs-root .v9GroupTitle small{font-size:10.5px;color:#9fa8b5}
+.cs-root .v9AspectPicker{gap:9px}.cs-root .v9AspectPicker button{padding:11px 3px;border-radius:11px;background:#fafbfe;border-color:#e7ecf3;color:#465062;font-size:12px}
+.cs-root .v9AspectPicker button.chosen{background:#edf3ff;border:1px solid #90a9ff;color:#395df7;box-shadow:inset 0 0 0 1px #cfdbff}
+.cs-root .v9TimeFields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.cs-root .v9TimeFields label{display:flex;flex-direction:column;gap:8px;min-width:0;color:#788390;font-size:11px}
+.cs-root .v9Numeric{width:100%;height:40px;border-radius:10px;padding:0 12px;border:1px solid #e2e7ef;color:#262d3b;background:#fff;font-size:14px;font-variant-numeric:tabular-nums;outline:none}
+.cs-root .v9Numeric:focus{border-color:#6381ff;box-shadow:0 0 0 3px #5177ff17}
+.cs-root .v9DurationLine{padding:12px 0;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#8994a4}
+.cs-root .v9DurationLine strong{color:#363f51;font-size:14px;font-variant-numeric:tabular-nums}
+.cs-root .v9Output{min-height:0;display:flex;flex-direction:column}
+.cs-root .v9Output .v9BlankStage{flex:1;min-height:0;padding:20px;position:relative;display:flex;align-items:center;justify-content:center;background:#f8faff;border:1px solid #eef1f5;border-radius:12px}
+.cs-root .v9Output .mockCanvasHolder{width:100%;height:100%;min-height:0;display:flex;align-items:center;justify-content:center}
+.cs-root .v9Output .mockVideoShell{background:#fff!important;max-height:100%;max-width:100%;box-shadow:0 1px 5px #212f5206!important;border:1px solid #e7eaf0;border-radius:10px;aspect-ratio:9/16;height:100%;width:auto}
+.cs-root .v9Output .mockVideoShell.ratio-1-1{aspect-ratio:1/1}.cs-root .v9Output .mockVideoShell.ratio-16-9{aspect-ratio:16/9}
+.cs-root .v9Fullscreen{border:1px solid #e3e8f1;position:absolute;top:9px;right:9px;border-radius:8px;background:#fff;color:#7a8798;display:grid;place-items:center;width:29px;height:29px;z-index:2}
+.cs-root .v9Fullscreen:hover{color:#405dff;background:#f4f7ff}
+.cs-root .v9PreviewNote{margin-top:11px;color:#a6afba;font-size:10.5px;text-align:center;flex:none}
+.cs-root .v9BlankStage:fullscreen{height:100dvh;width:100vw;padding:45px;background:#f8faff;border-radius:0;border:0}
+.cs-root .v9BlankStage:fullscreen .mockCanvasHolder{height:100%}
+.cs-root .v9StyleIntro{color:#98a1ad;font-size:11px;margin:0 0 14px}
+.cs-root .v9PresetGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.cs-root .v9PresetGrid .applePreset{height:88px;border-radius:12px;background:#fafbfe;border-color:#e7ebf3;gap:8px;font-size:10px}
+.cs-root .v9PresetGrid .applePreset .v7PresetText{font-size:24px}
+.cs-root .v9PresetGrid .applePreset.chosen{border-color:#9eb4ff;background:#f1f5ff;box-shadow:inset 0 0 0 1px #d4ddff;color:#4161f2}
+.cs-root .v9PresetGrid .applePreset i{color:#4161f2}
+.cs-root .v9SubtleCallout{display:flex;align-items:center;gap:8px;color:#909ba9;font-size:11px;margin-top:17px;padding-top:14px;border-top:1px solid #eef1f5}
+.cs-root .v9SubtleCallout svg{width:15px;height:15px;color:#456dff}
+.cs-root .v9ControlLabel{font-size:12px;font-weight:600;color:#3d4655;display:block;margin:0 0 10px}
+.cs-root .v9Input.appleTextField{height:43px;border:1px solid #e0e6ef;border-radius:10px;background:#fff;box-shadow:none;font-size:12px}
+.cs-root .v9Colors{margin-top:0;gap:12px}.cs-root .v9Colors .appleColorRow{font-size:11px;color:#788596;gap:9px}
+.cs-root .v9Colors .appleColorRow>span:last-child{height:43px;border-radius:10px;border-color:#e0e6ef}
+.cs-root .v9Page .applePosition.chosen,.cs-root .v9Page .appleMode.chosen{background:#f0f4ff;color:#4260f0;border-color:#a2b4ff;box-shadow:inset 0 0 0 1px #d3ddff}
+.cs-root .v9Page .applePositionBar{background:#4a67fa}
+.cs-root .v9Page .appleModeOptions{gap:10px}.cs-root .v9Page .appleMode{padding:15px;border-color:#e4e9f1}
+.cs-root .v9Page .appleMode.chosen svg{color:#4263f1}
+.cs-root .app.clipperMode .v9Page button:focus-visible,.cs-root .app.clipperMode .v9Page input:focus-visible{outline:2px solid #3f61ff;outline-offset:2px}
+@media(max-width:1200px){.cs-root .appleClipPage.v9Page{padding:20px 21px}.cs-root .v9Page .appleImportLayout,.cs-root .v9Page .appleWorkLayout{gap:13px}.cs-root .v9Page .appleSourceSurface,.cs-root .v9Page .appleImportViewer,.cs-root .v9Page .appleSettingsSide,.cs-root .v9Page .appleWorkspacePreview,.cs-root .v9Page .appleCaptionSettings,.cs-root .v9Page .appleMotionSettings{padding:15px}.cs-root .app.clipperMode .footer .step{gap:4px;font-size:11.5px}.cs-root .app.clipperMode .footer .stepIcon{width:29px;height:29px}}
+@media(max-width:900px){.cs-root .app.clipperMode .workspace #editor{height:auto;min-height:900px}.cs-root .appleClipPage.v9Page{height:auto;min-height:900px;overflow:visible}.cs-root .v9Page .appleImportLayout,.cs-root .v9Page .appleWorkLayout{grid-template-columns:1fr;grid-template-rows:450px 350px;min-height:820px}.cs-root .v9Page .appleWorkLayout{grid-template-rows:minmax(440px,auto) 340px}.cs-root .v9Page .v9Output{min-height:330px}.cs-root .app.clipperMode .footer .step{font-size:10px}}
+@media(max-width:600px){.cs-root .appleClipPage.v9Page{padding:15px}.cs-root .v9Page .appleImportLayout{grid-template-rows:490px 330px}.cs-root .v9Page .appleWorkLayout{grid-template-rows:minmax(470px,auto) 330px}.cs-root .v9YouTubeTitle span{display:none}.cs-root .v9YouTubeInput button{padding:0 9px}.cs-root .v9YouTubeInput button span{display:none}.cs-root .app.clipperMode .footer .stepIcon{width:24px;height:24px}.cs-root .app.clipperMode .footer .step{font-size:0}.cs-root .app.clipperMode .footer .stepSep{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.cs-root .v9Drop,.cs-root .v9Browse{transition:none}}
+
+/* embedding */
+.cs-root{height:100%;overflow:auto;position:relative;background:#fff;display:block}
+.cs-root.cs-overlay{height:0;overflow:visible;background:transparent;position:static}
+.cs-root.cs-overlay .dialogShade,.cs-root.cs-overlay .toast{z-index:2147483000}
+
+/* voices, gameplay library, writer */
+.cs-root .phone .bgVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.cs-root .phone.bg-video{background:#000!important}
+.cs-root .gameSection{grid-column:1/-1;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:#6b7788;margin-top:6px}
+.cs-root .gameVisual.clipPoster{background-size:cover;background-position:center;background-color:#1b2233;height:260px}
+.cs-root .posterTag{position:absolute;left:10px;bottom:10px;background:#000a;color:#fff!important;border-radius:8px;padding:5px 9px;font-size:11px!important}
+.cs-root .voiceRow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 0;border-bottom:1px solid #eaedf3}
+.cs-root .voiceRow label{font-size:16px}.cs-root .voiceControl{display:flex;align-items:center;gap:9px}.cs-root .voiceControl select{margin:0;width:150px;padding:9px 10px}
+.cs-root .writerDialog{width:min(560px,96vw)}.cs-root .writerDialog label{display:block;font-size:13px;font-weight:600;color:#3d4655;margin-top:12px}.cs-root .writerDialog .promptSelect{margin:6px 0}
+.cs-root .writerError{color:#d92c27!important;font-size:13px!important;margin:8px 0 0}
+.cs-root .writerDialog .modalBrandIcon{height:47px;width:47px;display:grid;place-items:center;border-radius:13px;background:#eaf0ff;color:#4564ff;margin-bottom:14px}
+
+/* clipper (real engine) */
+.cs-root .wrapChips{flex-wrap:wrap;gap:7px;margin-top:0}.cs-root .wrapChips button{flex:0 0 auto;padding:9px 13px;font-size:12px;font-weight:650}
+.cs-root .hintLine{font-size:12px;color:#8a95a4;margin-top:4px}
+.cs-root .v9Settings .voiceRow label{font-size:14px;font-weight:630}
+.cs-root .sampleCaption{position:absolute;left:6%;right:6%;bottom:14%;text-align:center;font-family:Impact,Arial,sans-serif;font-size:15px;line-height:1.1;color:#fff;-webkit-text-stroke:1px #131722;paint-order:stroke fill;text-transform:uppercase}.cs-root .sampleCaption b{color:#fff236}
+.cs-root .clipRunCard{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;min-height:340px;border:1px solid #e5e8ee;border-radius:15px;padding:30px;background:#fafcff}
+.cs-root .clipRunCard h2{margin:0;font-size:22px;letter-spacing:-.5px}.cs-root .clipRunCard p{margin:0;color:#7b8794;font-size:14px;max-width:520px}
+.cs-root .clipLog{font-size:11px;color:#8b95a5;line-height:1.6;min-height:70px;max-width:520px}
+.cs-root .clipResults{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;padding:2px}
+.cs-root .clipResult{border:1px solid #e3e8f1;border-radius:15px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+.cs-root .clipThumb{aspect-ratio:9/12;background:#0e1424}.cs-root .clipThumb video{width:100%;height:100%;object-fit:cover;display:block}
+.cs-root .clipInfo{padding:12px 13px 14px;display:flex;flex-direction:column;gap:5px}.cs-root .clipInfo strong{font-size:14px;letter-spacing:-.2px}.cs-root .clipInfo small{color:#7c8797;font-size:11px}.cs-root .clipInfo p{margin:0;font-size:12px;color:#5f6b7c;line-height:1.45;min-height:34px}
+.cs-root .clipActions{display:flex;gap:8px;margin-top:6px}.cs-root .clipActions .outlineBtn{height:34px;font-size:12px;padding:0 12px;text-decoration:none;color:#1d2433;justify-content:center;flex:1}
+
+/* Clyra's original phone styles are imported intact; only its FRAME housing differs. */
+.csp-root{height:100%;min-height:0;display:flex;flex-direction:column;background:#fff}
+.csp-heading{height:77px;min-height:77px;display:flex;align-items:center;padding:20px 30px;border-bottom:1px solid #e6e7ea}
+.csp-heading strong{font-size:26px;line-height:38px;font-weight:550;letter-spacing:-.65px}
+.csp-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:18px 50px;background:#fff}
+.cs-root.csp-root .phone{width:256px;height:454px;min-width:256px;min-height:454px;border-radius:15px;box-shadow:0 0 0 1px #d4dbe6;flex:none;zoom:.9}
+.cs-root.csp-root .phone .bgVideo{object-fit:cover}
+.csp-fullshade{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#111925;padding:0;overflow:clip;overscroll-behavior:contain}
+.csp-side-video{position:absolute;inset:-40px;width:calc(100% + 80px);height:calc(100% + 80px);object-fit:cover;filter:blur(30px) brightness(.46);transform:scale(1.08);pointer-events:none}
+.cs-root.csp-root .csp-fullshade .phone.full{position:relative;z-index:1;width:min(calc(100dvh*9/16),100vw);height:min(100dvh,calc(100vw*16/9));aspect-ratio:9/16;min-width:0;min-height:0;max-width:none;max-height:none;zoom:1;border-radius:0;box-shadow:0 0 70px #0008}
+.cs-root.csp-root .phone .storyChat .bubbleLine{opacity:var(--bubble-o,1)!important;transform:translateY(var(--bubble-y,0px)) scale(var(--bubble-s,1))!important;animation:none!important}
+.cs-root.csp-root .phone .storyChat .bubble.has-image{padding:3px;max-width:90%;overflow:hidden}
+.cs-root.csp-root .phone .storyChat .bubble img{display:block;width:min(100%,calc(155px * var(--chat-scale)));max-height:calc(185px * var(--chat-scale));object-fit:cover;border-radius:calc(9px * var(--chat-scale))}
+.cs-root.csp-root .phone .storyChat .bubble.has-image .messageCopy:not(:empty){display:block;padding:calc(5px * var(--chat-scale)) calc(4px * var(--chat-scale)) calc(2px * var(--chat-scale))}
+.csp-close{position:absolute;z-index:2;top:20px;right:24px;width:40px;height:40px;border:1px solid #ffffff40;border-radius:50%;background:#ffffff20;color:#fff;font-size:30px;line-height:1;cursor:pointer;transition:background .18s ease,transform .18s ease}
+.csp-close:hover{background:#ffffff38;transform:scale(1.07)}
+@media(max-width:700px){.csp-stage{padding-inline:18px}.csp-heading{height:58px;min-height:58px;padding:10px 18px}.csp-heading strong{font-size:18px}}
+.cs-root.csp-root.csp-render-root{width:256px;height:454px;min-width:256px;min-height:454px;overflow:hidden}
+.cs-root.csp-root.csp-render-root .csp-stage{width:256px;height:454px;padding:0;display:block}
+.cs-root.csp-root.csp-render-root .phone{width:256px;height:454px;min-width:256px;min-height:454px;zoom:1;border-radius:0;box-shadow:none}
+.cs-root.csp-root.csp-render-root .phone .playerControls{display:none}
+
+/* in a FRAME page the phone is see-through: the gameplay clip underneath is the background */
+html,body{background:transparent!important;margin:0;overflow:hidden}
+*,*::before,*::after{box-sizing:border-box}
+.cs-root.csp-root.csp-render-root{background:transparent;position:absolute}
+.cs-root.csp-root.csp-render-root .csp-stage{background:transparent}
+.cs-root.csp-root .phone{background:transparent!important;box-shadow:none!important}
+
+/* Would you rather: an option's picture above its words */
+.cs-root .wyrPic{width:33cqw;aspect-ratio:1;object-fit:cover;border-radius:4.2cqw;border:1cqw solid #fff;box-shadow:0 1.2cqw 3.6cqw #0006}
+.cs-root .wyrPic[hidden]{display:none}
+.cs-root .wyrChoice.hasPic{gap:2.2cqw}
+.cs-root .wyrChoice.hasPic .wyrOption{font-size:6.6cqw}

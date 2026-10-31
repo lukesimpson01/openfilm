@@ -105,6 +105,12 @@ const run = (/** @type {string[]} */ args) => {
 /* the editor: built again on every change to studio/ui; Studio serves the files from disk */
 run([join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--watch', '--config', 'studio/ui/vite.config.ts']);
 
+/* the AI chat's host: the desktop app's chat (its agents, its record of each project) for the editor's chat panel */
+const CHAT_HOST = join(ROOT, '..', '..', 'apps', 'desktop', 'web', 'chat-host.mjs');
+/* started again if it stops (a crash must not leave the chat panel dead until the next dev run) */
+const chatHost = () => { const c = run([CHAT_HOST]); c.once('exit', (code, signal) => { if (signal !== 'SIGTERM' && signal !== 'SIGINT') setTimeout(chatHost, 1000); }); };
+if (existsSync(CHAT_HOST)) chatHost();
+
 /* Studio, started again when its code changes (pages open on it reconnect by themselves) */
 let server = run(['studio/server/main.mjs']);
 let timer = /** @type {NodeJS.Timeout | undefined} */ (undefined);

@@ -77,12 +77,13 @@ test('export covers the selection toolbar, keeps its menus usable, and leaves th
     assert.equal((await hit()).toolbar, true, 'the toolbar is reachable before opening export');
 
     await page.getByRole('button', { name: 'Export', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Export', exact: true });
+    const dialog = page.getByRole('dialog', { name: 'Export video', exact: true });
     await dialog.waitFor({ state: 'visible' });
     const coveredHit = await hit();
-    // Capture one real pointer click without running whichever action is beneath it.
+    // Capture the real pointer hit before the backdrop's pointer-down dismissal.
+    // This checks stacking without closing the dialog or running a covered action.
     await page.evaluate(() => {
-      document.addEventListener('click', (event) => {
+      document.addEventListener('pointerdown', (event) => {
         window.toolbarReceivedClick = Boolean(event.target.closest('[data-selection-toolbar]'));
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -93,18 +94,17 @@ test('export covers the selection toolbar, keeps its menus usable, and leaves th
     await page.mouse.click(coveredBox.x + coveredBox.width / 2, coveredBox.y + coveredBox.height / 2);
     const toolbarReceivedClick = await page.evaluate(() => window.toolbarReceivedClick);
 
-    // A dialog-layer fix must also leave its body-portaled MenuSelect above the dialog.
-    const fps = dialog.getByRole('button', { name: 'Frame rate', exact: true });
-    await fps.click();
-    const list = page.getByRole('listbox', { name: 'Frame rate', exact: true });
-    await list.waitFor({ state: 'visible' });
-    const choice = list.getByRole('option', { selected: false }).first();
-    const picked = await choice.textContent();
-    await choice.click();
-    await list.waitFor({ state: 'hidden' });
-    assert.equal(await fps.textContent(), picked, 'a frame rate can still be picked with the pointer');
+    // The simplified export keeps only resolution and destination. Both remain
+    // usable above the selection toolbar, without restoring the removed menus.
+    const smaller = dialog.getByRole('button', { name: /^720p/ });
+    await smaller.click();
+    assert.equal(await smaller.getAttribute('aria-pressed'), 'true');
+    assert.equal(await dialog.getByRole('button', { name: /^1080p/ }).getAttribute('aria-pressed'), 'false');
+    const destination = dialog.getByRole('textbox', { name: 'Save to', exact: true });
+    await destination.fill(join(scratch, 'exports'));
+    assert.equal(await destination.inputValue(), join(scratch, 'exports'));
 
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Close export', exact: true }).click();
     await dialog.waitFor({ state: 'hidden' });
     await toolbar.waitFor({ state: 'visible' });
     await toolbar.locator('[data-tool="clear-range"]').waitFor({ state: 'visible' });

@@ -31,7 +31,6 @@ import {
   ChevronDown,
   ChevronUp,
   MousePointer2,
-  MoveHorizontal,
   Play,
   Redo2,
   Scissors,
@@ -56,6 +55,7 @@ import {
   Pencil,
   TriangleAlert,
   Blend,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useT } from '@/i18n';
 import { keyAction, useKeyHint } from '@/lib/keymap-store';
@@ -518,7 +518,8 @@ function laneKindForHint(kind: string): 'visual' | 'audio' {
 const BADGE_COLOR: Record<string, string> = {
   M: 'var(--tl-scene)',
   V: 'var(--tl-video)',
-  A: 'var(--tl-voice)',
+  /* sound clips are light now; their badge keeps the blue */
+  A: 'var(--tl-accent)',
 };
 
 /** Word cues too close together keep only the first: zoomed out, five words a second is a smear. */
@@ -709,6 +710,12 @@ export interface TimelineProps {
   markerLane?: { shown: boolean; render: (lane: MarkerLaneView) => React.ReactNode };
   /** The toolbar's Add marker (left of split); M does the same. */
   onAddMarker?: () => void;
+  /** Play and the timecode, centered in the toolbar row. */
+  transport?: React.ReactNode;
+  /** Buttons at the toolbar's right end (the mixer switch). */
+  toolbarEnd?: React.ReactNode;
+  /** A clip's display name when it has a better one than its file (a layer's name). */
+  titleOf?: (src?: string,clipId?:string) => string | undefined;
   /** The ruler's own right-click menu, at a moment (film ms): adding a marker there. */
   rulerMenu?: (atMs: number) => ContextMenuEntry[];
   /** Drawn on each row, over its clips (the clips' markers). */
@@ -776,23 +783,20 @@ const SELECT_HIT = 8;
 const CHAT_RING = '0 0 0 2px var(--tl-accent), 0 0 10px 1px color-mix(in srgb, var(--tl-accent) 60%, transparent)';
 /* the sides (trim handles) are solid, top and bottom lighter; theme color (--tl-select) so it shows on light lanes */
 const SELECT_EDGE_X = 'var(--tl-select)';
-const SELECT_EDGE_Y = 'color-mix(in srgb, var(--tl-select) 70%, transparent)';
 
 function SelectFrame() {
   return (
     <span
       aria-hidden
       data-block-frame=""
-      className="pointer-events-none absolute rounded-[3px]"
+      className="pointer-events-none absolute rounded-[5px]"
       style={{
         top: -SELECT_Y,
         bottom: -SELECT_Y,
         left: -SELECT_X,
         right: -SELECT_X,
-        boxSizing: 'border-box',
-        borderStyle: 'solid',
-        borderColor: `${SELECT_EDGE_Y} ${SELECT_EDGE_X}`,
-        borderWidth: `${SELECT_Y}px ${SELECT_X}px`,
+        /* on a blue clip a blue ring would vanish: white against the clip, then the blue */
+        boxShadow: `0 0 0 1.5px #fff, 0 0 0 3px ${SELECT_EDGE_X}, 0 0 0 6px color-mix(in srgb, var(--tl-select) 18%, transparent)`,
       }}
     />
   );
@@ -842,8 +846,8 @@ function TrimHandle({
       {/* a bar shows on hover: an invisible handle gives no hint it can be pulled */}
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-y-[3px] w-[3px] rounded-full bg-[var(--tl-select)] opacity-0 transition-opacity group-hover/trim:opacity-90"
-        style={edge === 'start' ? { right: picked ? hit : undefined, left: picked ? undefined : 1 } : { left: picked ? hit : undefined, right: picked ? undefined : 1 }}
+        className={`pointer-events-none absolute top-1/2 h-[46%] max-h-[22px] min-h-[8px] w-[3px] -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.25),0_1px_3px_rgba(0,0,0,0.35)] transition-[opacity,transform] duration-150 group-hover/trim:scale-x-[1.35] group-hover/trim:opacity-100 ${picked ? 'opacity-95' : 'opacity-0 group-hover/block:opacity-80'}`}
+        style={edge === 'start' ? { right: picked ? hit + 2 : undefined, left: picked ? undefined : 3 } : { left: picked ? hit + 2 : undefined, right: picked ? undefined : 3 }}
       />
     </span>
   );
@@ -990,6 +994,9 @@ export const Timeline = React.memo(function Timeline({
   solo,
   markerLane,
   onAddMarker,
+  transport,
+  titleOf,
+  toolbarEnd,
   rulerMenu,
   trackOverlay,
   snapPointsMs,
@@ -2961,6 +2968,7 @@ export const Timeline = React.memo(function Timeline({
                 key={block.id}
                 /* data-* for automated UI checks: where a clip is drawn, whether a drag moved it */
                 data-block-id={block.id}
+                data-source-clip-id={block.clipId}
                 data-block-kind={block.kind}
                 data-block-title={block.title}
                 data-can-move={able.move ? '1' : '0'}
@@ -3038,7 +3046,7 @@ export const Timeline = React.memo(function Timeline({
                 onPointerLeave={() => hoverBlockRef.current?.(null)}
               >
                 <div
-                  className="absolute inset-0 overflow-hidden rounded-[3px]"
+                  className={`absolute inset-0 overflow-hidden rounded-[4px] transition-shadow duration-150 ${visual || block.kind === 'caption' ? 'shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] group-hover/block:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]' : 'shadow-[inset_0_0_0_1px_rgba(69,104,238,0.22)] group-hover/block:shadow-[inset_0_0_0_1px_rgba(69,104,238,0.7)]'}`}
                   style={{
                     background: color,
                     boxShadow: floating
@@ -3053,18 +3061,18 @@ export const Timeline = React.memo(function Timeline({
                 {/* info strip: name and length side by side (one statement), not at opposite ends of a wide clip */}
                 <div
                   className="pointer-events-none absolute inset-x-0 top-0 flex items-center overflow-hidden px-1.5"
-                  style={{ height: INFO_H, background: 'rgba(0,0,0,0.3)' }}
+                  style={{ height: INFO_H, background: visual || block.kind === 'caption' ? 'rgba(0,0,0,0.16)' : 'rgba(69,104,238,0.12)' }}
                 >
                   {/* pinned to the left of the view so a clip wider than the screen still says what it is (pinLabels,
                       on scroll: scrolling rebuilds nothing) */}
                   <span className="flex min-w-0 items-center gap-1" data-pin={left} data-pin-max={width - 48}>
                     {/* a voice says so before its name: it is what the subtitles are made from */}
                     {block.kind === 'voice' ? <Mic className="h-2.5 w-2.5 shrink-0 text-white/90" aria-hidden /> : null}
-                    <span className="min-w-0 truncate text-[10px] font-medium leading-none text-white/95">
-                      {block.title}
+                    <span className={`min-w-0 truncate text-[10px] font-medium leading-none ${visual || block.kind === 'caption' ? 'text-white/95' : 'text-[#2b43a8]'}`}>
+                      {titleOf?.(block.src,block.clipId) ?? block.title}
                     </span>
                     {width > 64 ? (
-                      <span className="shrink-0 text-[10px] leading-none tabular-nums text-white/70">
+                      <span className={`shrink-0 text-[10px] leading-none tabular-nums ${visual || block.kind === 'caption' ? 'text-white/70' : 'text-[#2b43a8]/60'}`}>
                         {block.noLength ? t('timeline.noLength') : `${((endMs - startMs) / 1000).toFixed(1)}s`}
                       </span>
                     ) : null}
@@ -3150,7 +3158,8 @@ export const Timeline = React.memo(function Timeline({
                   <BlockWaveform
                     url={waveUrl(block.src)}
                     width={width}
-                    height={Math.max(6, h - INFO_H - 2)}
+                    height={Math.max(6, h - INFO_H - 4)}
+                    mirror
                     color="var(--tl-wave)"
                     visiblePx={{ from: winFrom, to: winTo }}
                     inMs={(block.inMs ?? 0)
@@ -3293,7 +3302,7 @@ export const Timeline = React.memo(function Timeline({
   }, [
     tracks, trackPx, pxPerMs, ringed, selected, drag, waveUrl, mode, msAtClientX, onSplit, clipThumbs, posters, mediaTrouble, t,
     openBlockMenu, openLaneMenu, onEditBlocks, collapseIfClick, selectOne, setSelected, clipElements, thumbWindow, view.width,
-    chatClip, chatDraft, placedOf, pickForTrim, gap, withLinked, runSplit, trackOverlay,
+    chatClip, chatDraft, placedOf, pickForTrim, gap, withLinked, runSplit, trackOverlay, titleOf,
     fadeOfBlock, fadeDrag, startFade, transitions, transitionDrag, pickedTransition, onPickTransition, onTransition, startTransitionResize,
     nearFirst, nearLast,
   ]);
@@ -3869,7 +3878,7 @@ export const Timeline = React.memo(function Timeline({
       {/* ── Toolbar: mode (select / split) · undo / redo / history · split · status · the switches · zoom · subtitles ── */}
       <div
         ref={toolbarRef}
-        className="@container relative flex h-[34px] shrink-0 items-center gap-1.5 border-b px-2"
+        className="@container relative flex h-[40px] shrink-0 items-center gap-1 border-b px-2.5"
         style={{ background: TL.head, borderColor: TL.line }}
       >
         {onSplit ? <>
@@ -3902,6 +3911,7 @@ export const Timeline = React.memo(function Timeline({
           </>
         ) : null}
 
+        {history && (onAddMarker || onSplit) ? <span className="mx-1 h-4 w-px" style={{ background: TL.line }} /> : null}
         {onAddMarker ? (
           <ToolButton onClick={onAddMarker} disabled={!playable} label={t('editorTools.markerAdd')} hint={keyHint('add-marker')}>
             <MarkerGlyph size={16} />
@@ -3910,9 +3920,13 @@ export const Timeline = React.memo(function Timeline({
 
         {onSplit ? (
           <ToolButton
-            onClick={() => { void runSplit(selectedBlocks.filter((b) => drag.can(b).resize)); }}
-            /* lit only with a selection: a disabled button already says "this acts on the selection" */
-            disabled={!selectedBlocks.some((b) => drag.can(b).resize)}
+            /* the selection, else every clip the playhead is over (CapCut and iMovie split at the playhead) */
+            onClick={() => {
+              const chosen = selectedBlocks.filter((b) => drag.can(b).resize);
+              const at = timeMsRef.current;
+              void runSplit(chosen.length ? chosen : tracks.flatMap((tr) => tr.blocks).filter((b) => drag.can(b).resize && at > b.startMs && at < b.endMs));
+            }}
+            disabled={!playable}
             label={t('timeline.split')}
             hint={keyHint('split')}
           >
@@ -3920,8 +3934,9 @@ export const Timeline = React.memo(function Timeline({
           </ToolButton>
         ) : null}
 
-        {/* the middle is for status: "Editing source…" and errors (not among the tools, where it would look like one) */}
-        <div className="flex min-w-0 flex-1 items-center justify-center">
+        {/* the middle: play and the timecode, centered in the room the tools leave; status beside them */}
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-3">
+          {transport ? <div className="shrink-0">{transport}</div> : null}
           {dropBusy || drag.saving ? (
             <span className="text-[11px]" style={{ color: TL.faint }}>{t('timeline.applying')}</span>
           ) : dropError || drag.error ? (
@@ -3950,35 +3965,18 @@ export const Timeline = React.memo(function Timeline({
           ) : null}
         </div>
 
-        {/* the switches (lib/timeline-prefs), in this order: the main-track magnet, snapping, linkage, the preview axis */}
-        {onEditOps ? <>
-          <span data-timeline-magnet={prefs.magnet ? '1' : '0'}>
-            <ToolButton onClick={() => togglePref('magnet')} active={prefs.magnet} label={t('timeline.magnet')}
-              hint={prefs.magnet ? t('timeline.magnetOn') : t('timeline.magnetOff')}>
-              <Magnet size={15} />
-            </ToolButton>
-          </span>
-          <span data-timeline-snap={snap ? '1' : '0'}>
-            <ToolButton onClick={() => togglePref('snap')} active={snap} label={t('timeline.snap')}
-              hint={snap ? t('timeline.snapOn') : t('timeline.snapOff')}>
-              <SeparatorVertical size={15} />
-            </ToolButton>
-          </span>
-          <span data-timeline-linkage={prefs.linkage ? '1' : '0'}>
-            <ToolButton onClick={() => togglePref('linkage')} active={prefs.linkage} label={t('timeline.linkage')}
-              hint={prefs.linkage ? t('timeline.linkageOn') : t('timeline.linkageOff')}>
-              <Paperclip size={15} />
-            </ToolButton>
-          </span>
-        </> : null}
-        {onHoverPreview ? (
-          <span data-timeline-preview-axis={prefs.previewAxis ? '1' : '0'}>
-            <ToolButton onClick={() => togglePref('previewAxis')} active={prefs.previewAxis} label={t('timeline.previewAxis')}
-              hint={prefs.previewAxis ? t('timeline.previewAxisOn') : t('timeline.previewAxisOff')}>
-              <TextCursor size={15} />
-            </ToolButton>
-          </span>
+        {/* the switches (lib/timeline-prefs): magnet, snapping, linkage, preview axis, in one quiet menu */}
+        {onEditOps || onHoverPreview ? (
+          <TimelineOptions items={[
+            ...(onEditOps ? [
+              { key: 'magnet', on: prefs.magnet, label: t('timeline.magnet'), icon: <Magnet size={14} />, data: 'data-timeline-magnet' },
+              { key: 'snap', on: snap, label: t('timeline.snap'), icon: <SeparatorVertical size={14} />, data: 'data-timeline-snap' },
+              { key: 'linkage', on: prefs.linkage, label: t('timeline.linkage'), icon: <Paperclip size={14} />, data: 'data-timeline-linkage' },
+            ] : []),
+            ...(onHoverPreview ? [{ key: 'previewAxis', on: prefs.previewAxis, label: t('timeline.previewAxis'), icon: <TextCursor size={14} />, data: 'data-timeline-preview-axis' }] : []),
+          ] as const} onToggle={(k) => togglePref(k as Parameters<typeof togglePref>[0])} />
         ) : null}
+        <span className="mx-1 h-4 w-px" style={{ background: TL.line }} />
 
         <ToolButton
           onClick={() => zoomBy(1 / ZOOM_STEP)}
@@ -4010,15 +4008,7 @@ export const Timeline = React.memo(function Timeline({
         >
           <ZoomIn size={15} />
         </ToolButton>
-        {/* back to the opening zoom (80%, a little room after the end); a horizontal arrow: zoom is horizontal only */}
-        <ToolButton
-          onClick={() => zoomTo(ZOOM_DEFAULT)}
-          disabled={!playable || Math.abs(viewZoom - ZOOM_DEFAULT) < 0.01}
-          label={t('timeline.zoomFit')}
-        >
-          <MoveHorizontal size={15} />
-        </ToolButton>
-
+        {toolbarEnd}
         {/* subtitles: toggles the overlay on the picture (not the film itself) */}
         {subtitles ? <SubtitlePicker subtitles={subtitles} /> : null}
       </div>
@@ -4571,14 +4561,53 @@ function ToolButton({
         /* no focus outline after a click; focus-visible still shows for keyboard users */
         className={`flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-[6px] outline-none transition focus-visible:ring-1 focus-visible:ring-[var(--tl-accent)] ${
           disabled ? 'cursor-default' : ''
-        } ${active || disabled ? '' : 'hover:bg-black/5 dark:hover:bg-white/10'}`}
+        } ${disabled ? '' : 'hover:bg-black/5 dark:hover:bg-white/10'}`}
+        /* on: a blue icon on a quiet fill, not a solid blue square */
         style={active
-          ? { color: '#fff', background: 'var(--tl-accent)' }
+          ? { color: 'var(--tl-accent)' }
           : { color: disabled ? 'var(--text-faint)' : 'var(--text-dim)' }}
       >
         {children}
       </button>
     </Tooltip>
+  );
+}
+
+/** The timeline's switches (magnet, snapping, linkage, preview axis) behind one button: the toolbar stays calm. */
+function TimelineOptions({ items, onToggle }: {
+  items: readonly { key: string; on: boolean; label: string; icon: React.ReactNode; data: string }[];
+  onToggle: (key: string) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('pointerdown', close, true); window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('pointerdown', close, true); window.removeEventListener('keydown', esc); };
+  }, [open]);
+  const onCount = items.filter((i) => i.on).length;
+  return (
+    <div ref={ref} className="relative" {...Object.fromEntries(items.map((i) => [i.data, i.on ? '1' : '0']))}>
+      <ToolButton onClick={() => setOpen((v) => !v)} active={open} label={`Timeline options (${onCount} on)`}>
+        <SlidersHorizontal size={15} />
+      </ToolButton>
+      {open ? (
+        <div role="menu" className="absolute right-0 top-[calc(100%+6px)] z-[60] w-[210px] origin-top-right animate-[tl-pop_.16s_cubic-bezier(.2,.8,.2,1)] rounded-xl border border-[var(--border)] bg-[var(--bg)] p-1 shadow-[0_12px_32px_rgba(15,23,42,0.14)]">
+          {items.map((i) => (
+            <button key={i.key} type="button" role="menuitemcheckbox" aria-checked={i.on} onMouseDown={(e) => e.preventDefault()} onClick={() => onToggle(i.key)}
+              className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-left text-[12.5px] text-[var(--text)] transition hover:bg-[var(--bg-hover)]">
+              <span className={i.on ? 'text-[var(--tl-accent)]' : 'text-[var(--text-dim)]'}>{i.icon}</span>
+              <span className="min-w-0 flex-1 truncate">{i.label}</span>
+              <span className={`relative h-[16px] w-[28px] shrink-0 rounded-full transition-colors ${i.on ? 'bg-[var(--tl-accent)]' : 'bg-[var(--border-strong)]'}`}>
+                <span className={`absolute top-[2px] h-3 w-3 rounded-full bg-white shadow transition-transform duration-200 ${i.on ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

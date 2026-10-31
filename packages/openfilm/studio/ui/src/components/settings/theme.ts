@@ -1,5 +1,5 @@
 /**
- * The theme: light, dark or the system's, dark until the person chooses. The choice is kept in localStorage `openfilm.theme` and shown as
+ * The theme: light, dark or the system's, light until the person chooses. The choice is kept in localStorage `openfilm.theme` and shown as
  * `<html data-theme>`; index.html applies it before the first paint, this keeps it current afterwards, in every page
  * of Studio that is open.
  */
@@ -13,12 +13,18 @@ const dark = () => window.matchMedia('(prefers-color-scheme: dark)');
 function saved(): ThemeMode {
   try {
     const value = localStorage.getItem(KEY);
-    return value === 'light' || value === 'system' ? value : 'dark';
-  } catch { return 'dark'; }
+    return value === 'light' || value === 'dark' || value === 'system' ? value : 'light';
+  } catch { return 'light'; }
 }
 
+let transitionEnd:ReturnType<typeof setTimeout>|undefined;
 function apply(mode: ThemeMode) {
-  document.documentElement.dataset.theme = mode === 'system' ? (dark().matches ? 'dark' : 'light') : mode;
+  const root=document.documentElement,next=mode === 'system' ? (dark().matches ? 'dark' : 'light') : mode;
+  if(root.dataset.theme===next)return;
+  root.dataset.themeTransition='';clearTimeout(transitionEnd);
+  root.dataset.theme=next;
+  transitionEnd=setTimeout(()=>delete root.dataset.themeTransition,340);
+  window.dispatchEvent(new CustomEvent('frame-theme',{detail:next}));
 }
 
 const listeners = new Set<() => void>();

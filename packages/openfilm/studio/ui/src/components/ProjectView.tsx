@@ -7,11 +7,20 @@
  * are written one at a time (see editor/use-film.ts); the agent's writes come in through the folder's events.
  */
 import * as React from 'react';
-import { BookmarkPlus, ClipboardCopy, ClipboardPaste, GalleryVerticalEnd, Layers, LibraryBig, MessageSquarePlus, MonitorDown, Settings2, TriangleAlert, Upload } from 'lucide-react';
+import { BookmarkPlus, ClipboardCopy, ClipboardPaste, GalleryVerticalEnd, Layers, MessageSquarePlus, Settings2, TriangleAlert, Upload } from 'lucide-react';
 import { applyOps } from '../../../server/ops.mjs';
 import { api, ApiError, PREFS_EVENT, projectEvents, type Clip, type Film, type Listing, type Op, type ProjectFilm, type ProjectSettings } from '@/api';
 import { useT } from '@/i18n';
 import { useFilm, type Step } from '@/editor/use-film';
+import { FramePanel } from '@/frame/FramePanel';
+import { FrameRail, type FrameTab } from '@/frame/FrameRail';
+import { useKeyframeTimes, keyframeOverlay, editKeys, useKeyLaneKeys, subtitleOverlay } from '@/frame/KeyLane';
+import { lineOf, LINE_LABEL } from '@/frame/lines';
+const AUTO_LABEL = new RegExp(`^(${Object.values(LINE_LABEL).map((l) => l.replace(/[&]/g, '\\$&')).join('|')})( \\d+)?$`);
+import { transitionMarks, transitionOverlay } from '@/frame/TransitionMarks';
+import { Welcome } from '@/frame/Welcome';
+import { FrameInspector } from '@/frame/FrameInspector';
+import { isFrameSrc, layerIdOf } from '@/frame/layers';
 import { Player } from '@/editor/player';
 import { Preview, type FilmInfo, type PlayedReport, type PreviewHandle } from '@/editor/Preview';
 import { usePreviewRenders } from '@/editor/use-preview-renders';
@@ -53,7 +62,6 @@ import { BrandLoadingScreen } from './BrandLoadingScreen';
 import { BrandLogo } from './BrandLogo';
 import { SettingsModal } from './settings/SettingsModal';
 import { useSettings } from './settings/use-settings';
-import { DesktopDialog } from './DesktopDialog';
 import type { ContextMenuEntry } from './ContextMenu';
 import { studioHost, useHostPanel, type CommunityItem, type HostPanel, type StageBox, type StudioCommand, type StudioRef } from '../lib/host';
 import { clipRef, fileRef, layerRef, markRange, momentRef, rangeRef, regionRef, stillUrl, subtitleRef, trackRef, type ClipFrameSource, type FilmRange } from '@/lib/studio-refs';
@@ -65,11 +73,10 @@ import { useFilmSubtitles } from '@/lib/use-film-subtitles';
 import { speakerAt, useSubtitleEdits } from '@/lib/use-subtitle-edits';
 import { cueAt, filmSubtitleStyleFor, filmSubtitleWords, sameFilmSubtitleLanguage } from '@/lib/subtitles';
 import { DEFAULT_INSPECTOR, DOCK_GAP, DockPaneDivider, MIN_DOCK_H, MIN_INSPECTOR, MIN_STAGE_H, MIN_VIEWER, PaneDivider, usePaneSize } from './PaneDivider';
-import { PANE_BAR, PANE_BTN_ON, PANE_TOGGLE, PANE_TOGGLE_ICON } from './dock-pane-bar';
+import { PANE_BAR, PANE_BTN, PANE_BTN_ON, PANE_ICON, PANE_TOGGLE, PANE_TOGGLE_ICON } from './dock-pane-bar';
 import { Tooltip } from './Tooltip';
 import { TabStrip } from './TabStrip';
 import { ExamplesDialog } from './ExamplesGallery';
-import { UpdateButton, WebUpdateButton } from './UpdateButton';
 import { MediaPool, type ImportProgress } from './MediaPool';
 import type { SubtitleRowSpec } from './SubtitleRow';
 import { LayersPanel } from './LayersPanel';
@@ -77,9 +84,13 @@ import type { LayerRow } from '@/lib/layers-tree';
 import { SourcePreview } from './SourcePreview';
 import { ResourceInspector } from './ResourceInspector';
 import { FilmInspector } from './FilmInspector';
+import {UniversalTracking} from '../frame/UniversalTracking';
 import { Timeline, timelineFitHeight, type TimelineCommands, type TimelineHistory } from './Timeline';
 import { useEditorTools } from './use-editor-tools';
 import { AudioMeters, METERS_W } from './AudioMeters';
+import { MixerView } from '@/frame/MixerView';
+import { SlidersVertical, MessageSquareText, X } from 'lucide-react';
+import { ChatPanel } from '@/frame/ChatPanel';
 import { trackFlagStep, type SessionTimeline } from './OperationHistory';
 import { ProjectLayoutMenu } from './ProjectLayoutMenu';
 import { ProjectMenu } from './ProjectMenu';
@@ -87,7 +98,7 @@ import { ProjectHistoryButton, ProjectHistoryControls } from './ProjectHistoryCo
 import { useProjectHistory } from './use-project-history';
 import { ProjectsPopover } from './ProjectsLibrary';
 import { FilmFullscreenBar, useFullscreenKeys } from './FilmFullscreenBar';
-import { ViewerBar } from './ViewerBar';
+import { ViewerBar, Transport } from './ViewerBar';
 import { LiveTime, type PlaybackClock } from './LiveTime';
 import { Toast, useToast } from './Toast';
 import { SpendAsks } from './SpendAsks';
@@ -209,6 +220,7 @@ export function ProjectView({ projectId, onProject, onLeave }: {
   const [failure, setFailure] = React.useState<string | null>(null);
   /** why the picture could not draw the film (shown on the stage; the timeline then places clips by film.html alone) */
   const [previewError, setPreviewError] = React.useState<string | null>(null);
+  const [exportWaiting, setExportWaiting] = React.useState(false);
   const previewErrorRef = React.useRef(previewError);
   previewErrorRef.current = previewError;
   const [rawListing, setRawListing] = React.useState<Listing | null>(null);
@@ -383,6 +395,8 @@ export function ProjectView({ projectId, onProject, onLeave }: {
   }, []);
   const [playing, setPlaying] = React.useState(false);
   const [timeMs, setTimeMs] = React.useState(0);
+  /* the playhead for the AI chat's actions (read when it acts, not on every frame) */
+  const timeMsRef = React.useRef(0); timeMsRef.current = timeMs;
   const timeRef = React.useRef(0);
   timeRef.current = timeMs;
   const listeners = React.useRef(new Set<() => void>());
@@ -459,6 +473,20 @@ export function ProjectView({ projectId, onProject, onLeave }: {
     if (!player.current.playing) preview.current?.seek(pictureAt(t));
     for (const fn of listeners.current) fn();
   }, []);
+  /* a transition's Preview: from just before it, playing */
+  React.useEffect(() => {
+    const on = (e: Event) => { seek(Math.round((e as CustomEvent<number>).detail)); if (!player.current.playing) toggle(); };
+    window.addEventListener('frame-play-from', on);
+    return () => window.removeEventListener('frame-play-from', on);
+  });
+  /* the inspector of a FRAME layer jumps to its keyframes (frame/FrameInspector.tsx) */
+  React.useEffect(() => {
+    const on = (e: Event) => seek(Math.round((e as CustomEvent<number>).detail * 1000));
+    const pause=()=>{if(player.current.playing)toggle();};
+    window.addEventListener('frame-pause',pause);
+    window.addEventListener('frame-seek', on);
+    return () => {window.removeEventListener('frame-seek', on);window.removeEventListener('frame-pause',pause);};
+  }, [seek]);
   /* ── J / K / L: the shuttle. 1× and 2× forward are the player's own (with sound); faster, or backwards, the picture
      alone is sought along at that rate, silent, as a scrub is (the player plays forward only, at most 2×) ── */
   const shuttleRateRef = React.useRef(0);
@@ -637,7 +665,25 @@ export function ProjectView({ projectId, onProject, onLeave }: {
   React.useEffect(() => () => setTimecodeFps(30), []);
   const frameRate = React.useMemo(() => ({ fps: projectFps, fromFootage: settings?.fps == null, onChange: (fps: number) => patchSettings({ fps }) }), [projectFps, settings, patchSettings]);
   /* tracks' names, by film.html track index (found again by their clips: lib/timeline-nav trackNamesOf) */
-  const trackNames = React.useMemo(() => trackNamesOf(settings?.trackNames ?? [], film.film?.tracks ?? []), [settings, film.film]);
+  const trackNames = React.useMemo(() => {
+    const tracks = film.film?.tracks ?? [];
+    const names = new Map(trackNamesOf(settings?.trackNames ?? [], tracks));
+    /* a line nobody named says what it holds (Video, Audio, Subtitles…), numbered when there are more of a kind */
+    const seen: Record<string, number> = {};
+    for (let i = tracks.length - 1; i >= 0; i--) {
+      const kinds = new Set(tracks[i].clips.map((c) => lineOf(c.src)));
+      if (kinds.size !== 1) continue;
+      const [kind] = [...kinds];
+      seen[kind] = (seen[kind] ?? 0) + 1;
+      const auto = seen[kind] > 1 ? `${LINE_LABEL[kind]} ${seen[kind]}` : LINE_LABEL[kind];
+      /* a name the editor gave a line (one of its own labels) that no longer fits what the line holds is replaced */
+      const given = names.get(i);
+      if (!given || (AUTO_LABEL.test(given) && !given.startsWith(LINE_LABEL[kind]))) names.set(i, auto);
+    }
+    return names;
+  }, [settings, film.film]);
+  const settingsRef = React.useRef(settings);
+  settingsRef.current = settings;
   const renameTrack = React.useCallback((docIndex: number, name: string) => {
     if ((trackNames.get(docIndex) ?? '') === name.trim()) return;
     patchSettings({ trackNames: namedTrack(settings?.trackNames ?? [], filmRef.current?.tracks ?? [], docIndex, name) });
@@ -677,7 +723,7 @@ export function ProjectView({ projectId, onProject, onLeave }: {
   const viewerRowRef = React.useRef<HTMLDivElement | null>(null);
   const { width: storedTimelineHeight, commit: commitTimelineHeight, saved: timelineHeightSaved } = usePaneSize('openfilm.project.timelineH', TIMELINE_H, MIN_DOCK_H);
   const { width: inspectorWidth, commit: commitInspectorWidth } = usePaneSize('openfilm.project.inspectorW', DEFAULT_INSPECTOR, MIN_INSPECTOR);
-  const [assetsPaneOpen, setAssetsPaneOpen] = useKeptFlag('openfilm.project.assets');
+  const [assetsPaneOpen, setAssetsPaneOpen] = useKeptFlag('openfilm.project.assets', false);
   const [assetsWidth, setAssetsWidth] = React.useState(280);
   /* the Layers panel (components/LayersPanel), left of the picture, after the assets */
   const [layersPaneOpen, setLayersPaneOpen] = useKeptFlag('openfilm.project.layers', false);
@@ -716,6 +762,25 @@ export function ProjectView({ projectId, onProject, onLeave }: {
       : Math.min(timelineHeight ?? TIMELINE_H, fitTimelineHeight.current + TIMELINE_SPARE);
 
   /* what is selected in the picture: a layer of a page, or a clip in hand */
+  /* the Shorts tool rail: which tool's panel is open (Subtitles when a project opens, as in the Shorts tools) */
+  const [framePaneOpen, setFramePaneOpen] = React.useState(true);
+  const [frameTab, setFrameTab] = React.useState<FrameTab>('subtitles');
+  const [frameStory, setFrameStory] = React.useState<'chat' | 'reddit' | 'wyr' | null>(null);
+  const FRAME_PANEL_W = 340;
+  const openFrameTool = React.useCallback((name: string) => {
+    const [tab, sub] = name.split(':') as [FrameTab, string | undefined];
+    /* Media is one of the tools: it opens in the same panel as the others, not as a pane of its own */
+    setFrameTab(tab); setFramePaneOpen(true);
+    if (window.matchMedia('(max-width: 1100px)').matches) setInspectorOpen(false);
+    if (tab === 'stories') setFrameStory((sub as 'chat') || 'chat');
+  }, []);
+  React.useEffect(() => {
+    const onTab = (e: Event) => openFrameTool(String((e as CustomEvent<string>).detail));
+    const onMedia = () => openFrameTool('media');
+    window.addEventListener('frame-open-tab', onTab); window.addEventListener('frame-open-media', onMedia);
+    return () => { window.removeEventListener('frame-open-tab', onTab); window.removeEventListener('frame-open-media', onMedia); };
+  }, [openFrameTool]);
+  const [welcomeDone, setWelcomeDone] = React.useState(false);
   const [stageElement, setStageElement] = React.useState<StageElement | null>(null);
   /* the inspector's font menu: this project's fonts, for the page the layer in hand is in */
   const stageClipLoc = stageElement?.clipLoc;
@@ -769,7 +834,18 @@ export function ProjectView({ projectId, onProject, onLeave }: {
   }, []);
   const rowNarrow = rowWidth > 0 && rowWidth < MIN_VIEWER + DEFAULT_INSPECTOR + 240;
   const inspectorIdle = inspectorContent === 'selection' && !stageElement && !selectedBlocks.length;
-  const inspectorShown = inspectorOpen && !(rowNarrow && inspectorIdle);
+  /* a story clip is edited with its own tool on the left: no inspector for it on the right */
+  const storySelected = selectedBlocks.length === 1 && /^frame\/layer-story-/.test(selectedBlocks[0].src ?? '');
+  const storyKindSelected = storySelected ? (/^frame\/layer-story-(chat|reddit|wyr)-/.exec(selectedBlocks[0].src ?? '')?.[1] ?? null) : null;
+  const inspectorShown = inspectorOpen && !(rowNarrow && inspectorIdle) && !storySelected;
+  const { map: keyTimes, names: layerNames, cues: subCues, offsets: keyOffsets } = useKeyframeTimes(film.film, folder);
+  const subOverlay = React.useMemo(() => subtitleOverlay(subCues), [subCues]);
+  const keyOverlay = React.useMemo(() => keyframeOverlay(keyTimes, seek, (layer, from, to) => void editKeys(projectId, folder, layer, from, to), keyOffsets), [keyTimes, seek, projectId, folder, keyOffsets]);
+  useKeyLaneKeys(projectId, folder);
+  /* a layer clip is called by its layer's name (Rectangle, Reddit story…), not its file */
+  const trOverlay = React.useMemo(() => transitionOverlay(transitionMarks(film.film), layerNames, (id) => setSelectedKeys([id])), [film.film, layerNames]);
+  const clipTitle = React.useCallback((src?: string,clipId?:string) => film.film?.tracks.flatMap(tr=>tr.clips).find(c=>c.id===clipId)?.attrs?.['data-frame-action']??(src && isFrameSrc(src) ? layerNames[layerIdOf(src)] : undefined), [layerNames,film.film]);
+  React.useEffect(() => { if (storyKindSelected) openFrameTool(`stories:${storyKindSelected}`); }, [storyKindSelected, selectedBlocks[0]?.clipId, openFrameTool]);
   const inspectorWanted = inspectorWidth ?? DEFAULT_INSPECTOR;
   const assetsRoom = rowWidth - (inspectorShown ? inspectorWanted : 0) - VIEWER_BESIDE_ASSETS - 16;
   const assetsShownWidth = rowWidth ? Math.min(assetsWidth, assetsRoom) : assetsWidth;
@@ -844,6 +920,19 @@ export function ProjectView({ projectId, onProject, onLeave }: {
   }, [film.film]);
   const filmTransitions = React.useMemo(() => findTransitions(editModelOf(timelineTracks, clipLinks), clipFacts), [timelineTracks, clipLinks, clipFacts]);
   const [pickedTransition, setPickedTransition] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const select = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (!id) return;
+      setSelectedKeys([id]);
+      setStageElement(null);
+      setPickedTransition(null);
+      setInspectorContent('selection');
+      setInspectorOpen(true);
+    };
+    window.addEventListener('frame-select-clip', select);
+    return () => window.removeEventListener('frame-select-clip', select);
+  }, []);
   const pickTransition = React.useCallback((key: string | null) => {
     setPickedTransition(key);
     if (key) { setSelectedKeys([]); setInspectorContent('selection'); setInspectorOpen(true); }
@@ -1201,6 +1290,13 @@ export function ProjectView({ projectId, onProject, onLeave }: {
     projectId, tracks: timelineTracks, film: film.film, settings, patchSettings, player, timeRef, seek, edit: editOps, record: film.record,
     editModel, selectedClipIds: selectedKeys, listing, toast, pickFile: pickReplacement,
   });
+  /* the AI chat (the desktop app's own), sliding in from the right */
+  const [chatOpen, setChatOpen] = React.useState(false);
+  /* the mixer in the timeline's place; kept mounted a moment after it closes so it slides out */
+  const [mixerOn, setMixerOn] = React.useState(false);
+  const [mixerShown, setMixerShown] = React.useState(false);
+  React.useEffect(() => { if (mixerOn) { setMixerShown(true); return undefined; } const t = setTimeout(() => setMixerShown(false), 400); return () => clearTimeout(t); }, [mixerOn]);
+  const shownTracks = React.useMemo(() => tools.tracks.filter((tr) => !(tr.blocks.length && tr.blocks.every((b) => /^frame\/layer-tr-/.test(b.src ?? '')))), [tools.tracks]);
 
   /* how many of the person's edits an outside write undid: edits inside pages it left out, and clip edits it changed */
   const undoneCount = (dropped ?? []).reduce((n, d) => n + d.dropped.length, 0) + undone.length;
@@ -2302,10 +2398,22 @@ export function ProjectView({ projectId, onProject, onLeave }: {
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+  /* where the browser refuses real full screen (an embedded page, a webview), the picture fills the window instead */
+  const [windowFull, setWindowFull] = React.useState(false);
   const toggleFullscreen = React.useCallback(() => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void stageFullRef.current?.requestFullscreen();
-  }, []);
+    if (windowFull) { setWindowFull(false); setFullscreen(false); return; }
+    if (document.fullscreenElement) { void document.exitFullscreen(); return; }
+    const el = stageFullRef.current;
+    const fallback = () => { setWindowFull(true); setFullscreen(true); };
+    if (!el?.requestFullscreen || !document.fullscreenEnabled) { fallback(); return; }
+    el.requestFullscreen().catch(fallback);
+  }, [windowFull]);
+  React.useEffect(() => {
+    if (!windowFull) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setWindowFull(false); setFullscreen(false); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [windowFull]);
   const [volume, setVolumeState] = React.useState(1);
   const [muted, setMutedState] = React.useState(false);
   const [rate, setRateState] = React.useState(1);
@@ -2592,7 +2700,6 @@ export function ProjectView({ projectId, onProject, onLeave }: {
     setSubtitleProblem(null);
     void subs.transcribe().then((r) => { if (!r.ok) setSubtitleProblem({ text: r.error ?? '', connect: !!r.needsTranscriber }); });
   }, [subs, subtitleProblem]);
-  const [desktopOpen, setDesktopOpen] = React.useState(false);
   const headerOpsRef = React.useRef<HTMLDivElement>(null);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyAnchor, setHistoryAnchor] = React.useState<{ x: number; y: number } | null>(null);
@@ -2624,6 +2731,7 @@ export function ProjectView({ projectId, onProject, onLeave }: {
     setHistoryOpen((v) => !v);
   };
   const [exportOpen, setExportOpen] = React.useState(false);
+  React.useEffect(() => { if (!exportWaiting) return; if (previewError) { setExportWaiting(false); toast.showError(`${t('project.filmCannotExport')} ${previewError}`); } else if (totalMs > 0) { setExportWaiting(false); setExportOpen(true); } }, [exportWaiting, totalMs, previewError]); // eslint-disable-line react-hooks/exhaustive-deps
   const [exportClipId, setExportClipId] = React.useState<string | null>(null);
   /* the picture's menu is built before this: it reaches export through a ref */
   const exportTrayRef = React.useRef<ExportTrayHandle>(null);
@@ -2656,8 +2764,51 @@ export function ProjectView({ projectId, onProject, onLeave }: {
 
   const value = film.film;
   const viewerReady = Boolean(info);
+  /** Names the line a new clip opened (once the film has the clip: names as they stand now, the new line shifted others). */
+  const nameLineFor = (clipId: string, label: string) => {
+    const tryName = (left: number) => {
+      const tracks = filmRef.current?.tracks ?? [];
+      const idx = tracks.findIndex((tr) => tr.clips.some((c) => c.id === clipId));
+      if (idx < 0) { if (left > 0) setTimeout(() => tryName(left - 1), 100); return; }
+      const names = settingsRef.current?.trackNames ?? [];
+      if (!trackNamesOf(names, tracks).get(idx)) patchSettings({ trackNames: namedTrack(names, tracks, idx, label) });
+    };
+    setTimeout(() => tryName(20), 50);
+  };
   return (
-    <div className="workspace-shell flex flex-col bg-[var(--dock-shell)]">
+    <div className="workspace-shell flex flex-row bg-[var(--dock-shell)]">
+      <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} projectId={projectId} folder={folder}
+        film={() => filmRef.current} edit={(ops, label) => film.edit(ops, label)} timeMs={() => timeMsRef.current} seek={seek}
+        select={(id) => setSelectedKeys([id])} nameLine={nameLineFor} />
+      <FrameRail tab={frameTab} open={framePaneOpen} mediaOpen={framePaneOpen && frameTab === 'media'}
+        onTab={(tab) => {
+          if (framePaneOpen && frameTab === tab) { setFramePaneOpen(false); return; }
+          openFrameTool(tab);
+        }} />
+      {/* the open tool's panel runs the full height, beside the viewer and the timeline (as in the Shorts tools) */}
+      <div className={`frame-panel-slot shrink-0 overflow-hidden transition-[width,opacity] duration-[380ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] ${framePaneOpen ? 'opacity-100' : 'opacity-0'}`}
+        style={{ width: framePaneOpen ? FRAME_PANEL_W + DOCK_GAP : 0, paddingTop: DOCK_GAP, paddingBottom: DOCK_GAP, paddingLeft: DOCK_GAP }} data-frame-pane="">
+        <div className={`${PANE} h-full bg-[var(--dock-pane)] transition-transform duration-[380ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] ${framePaneOpen ? 'translate-x-0' : '-translate-x-8'}`} style={{ width: FRAME_PANEL_W }}>
+          {frameTab === 'media' ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <div className={PANE_BAR}>
+                <span className="flex-1 px-1.5 text-[13px] font-semibold text-[var(--text)]">Media</span>
+                <button type="button" aria-label="Hide panel" className={PANE_BTN} onClick={() => setFramePaneOpen(false)}><X size={PANE_ICON} /></button>
+              </div>
+              <div className="min-h-0 flex-1">{mediaPool()}</div>
+            </div>
+          ) : null}
+          <div className={frameTab === 'media' ? 'hidden' : 'h-full'}>
+          <FramePanel
+            projectId={projectId} folder={folder} film={film.film} timeMs={timeMs} width={FRAME_PANEL_W} tab={frameTab} story={frameStory}
+            edit={(ops, label) => film.edit(ops, label)}
+            selected={selectedBlocks[0] ? { clipId: selectedBlocks[0].clipId, src: selectedBlocks[0].src, startMs: selectedBlocks[0].startMs, endMs: selectedBlocks[0].endMs } : null}
+            onSelectClip={(id) => setSelectedKeys([id])}
+            onNameLine={nameLineFor}
+            onClose={() => setFramePaneOpen(false)} notify={toast.show} />
+          </div>
+        </div>
+      </div>
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col" style={{ paddingLeft: DOCK_GAP, paddingRight: DOCK_GAP, paddingBottom: DOCK_GAP }}>
         <div className="relative z-10 grid min-h-0 min-w-0 flex-1" style={{ gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateRows: 'auto minmax(0, 1fr)', gridTemplateAreas: '"bar" "main"' }}>
           {/* ── top bar: the title centered, whatever is on either side ── */}
@@ -2700,19 +2851,11 @@ export function ProjectView({ projectId, onProject, onLeave }: {
               </Tooltip>
               {inTabs ? null : <Tooltip label={t('nav.projects')} side="bottom">
                 <button type="button" aria-label={t('nav.projects')} onClick={() => setProjectsOpen((v) => !v)}
-                  className={`${TOP_BTN} ${projectsOpen ? 'bg-[var(--bg-hover)] text-[var(--text)]' : ''}`}>
+                  className={`${TOP_BTN} ${projectsOpen ? 'text-[var(--accent)]' : ''}`}>
                   <GalleryVerticalEnd size={15} />
                 </button>
               </Tooltip>}
-              <UpdateButton />
-              <WebUpdateButton />
-              {!studioHost && <Tooltip label={t('desktop.title')} side="bottom">
-                <button type="button" aria-haspopup="dialog" onClick={() => setDesktopOpen(true)}
-                  className={`flex h-[26px] shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] text-[var(--text-dim)] transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)] ${desktopOpen ? 'bg-[var(--bg-hover)] text-[var(--text)]' : ''}`}>
-                  <MonitorDown size={14} />
-                  {t('nav.desktop')}
-                </button>
-              </Tooltip>}
+
             </div>
             {inTabs ? (
               <TabStrip onRename={renameTab} onNew={() => setProjectsOpen(true)} onCoverFromFrame={coverFromFrame} maxLength={TITLE_MAX_CHARS} />
@@ -2720,20 +2863,28 @@ export function ProjectView({ projectId, onProject, onLeave }: {
             <div ref={headerOpsRef} className="pointer-events-auto flex min-w-0 items-center justify-end gap-1">
               <ProjectLayoutMenu className={TOP_BTN}
                 /* an app that keeps the media in its own panel opens it there, from its own button: not a pane of Studio's */
-                assets={hostAssets ? null : assetsPaneOpen} onAssets={setAssetsPaneOpen}
+                assets={hostAssets ? null : framePaneOpen && frameTab === 'media'} onAssets={(on) => { if (on) openFrameTool('media'); else setFramePaneOpen(false); }}
                 layers={layersPaneOpen} onLayers={setLayersPaneOpen}
                 timeline={timelineOpen} inspector={inspectorOpen}
                 onTimeline={setTimelineOpen} onInspector={setInspectorOpen}
                 hostPanel={hostPanel ? { label: hostPanel.label, open: hostPanel.open, onChange: hostPanel.setOpen } : null} />
               <ProjectHistoryButton open={historyOpen} onClick={openHistory} className={TOP_BTN} />
+              <Tooltip label="AI chat" side="bottom">
+                <button type="button" aria-label="AI chat" aria-pressed={chatOpen} onClick={() => setChatOpen((v) => !v)}
+                  className={`flex h-[28px] shrink-0 items-center gap-1.5 rounded-md px-2 text-[12.5px] font-medium transition ${chatOpen ? 'text-[var(--accent)]' : 'text-[var(--text-dim)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]'}`}>
+                  <MessageSquareText size={14} /><span className="hidden min-[480px]:inline">Chat</span>
+                </button>
+              </Tooltip>
               <Tooltip label={t('projectMenu.export')} side="bottom">
-                <button type="button" aria-label={t('projectMenu.export')} aria-haspopup="dialog" aria-expanded={exportOpen} className={TOP_BTN}
+                <button type="button" aria-label={t('projectMenu.export')} aria-haspopup="dialog" aria-expanded={exportOpen}
+                  className="ml-1 flex h-[28px] shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] font-medium text-[var(--text-dim)] transition hover:bg-[var(--bg-hover)] hover:text-[var(--text)]"
                   onClick={() => {
                     if (previewError) toast.showError(`${t('project.filmCannotExport')} ${previewError}`);
                     else if (totalMs > 0) setExportOpen(true);
-                    else toast.show(t('project.filmNotReady'));
+                    /* still loading: the dialog opens by itself as soon as the film is ready */
+                    else { setExportWaiting(true); toast.show('Getting the video ready to export…'); }
                   }}>
-                  <Upload size={16} />
+                  <Upload size={14} className={exportWaiting ? 'animate-pulse' : ''} /><span className="hidden min-[480px]:inline">Export</span>
                 </button>
               </Tooltip>
               {/* in an app's tabs these are in the tab's menu */}
@@ -2745,7 +2896,8 @@ export function ProjectView({ projectId, onProject, onLeave }: {
           {/* the app's own panel (lib/host.ts `panel`) sits right of this, under the top bar: room left for it */}
           <section ref={dockColRef} className="relative flex min-h-0 min-w-0 flex-col" style={{ gridArea: 'main', ...(hostPanel?.open ? { marginRight: Math.max(0, hostPanel.width - DOCK_GAP) } : null) }}>
             <div ref={viewerRowRef} className="relative flex min-h-0 min-w-0 flex-1 flex-row">
-              {!hostAssets && assetsPaneOpen && assetsFit ? (
+              {/* the media pool lives in the tool panel (Media), never as a pane of its own beside the picture */}
+              {false && !hostAssets && assetsPaneOpen && assetsFit ? (
                 <>
                   <div className={`${PANE} shrink-0 bg-[var(--dock-pane)]`} style={{ width: assetsShownWidth }}>
                     {mediaPool()}
@@ -2783,23 +2935,13 @@ export function ProjectView({ projectId, onProject, onLeave }: {
                 </>
               ) : null}
 
-              <div className={`${PANE} min-w-0 flex-1 bg-[var(--dock-pane)]`} data-viewer-pane="">
+              <div className={`${PANE} relative min-w-0 flex-1 bg-[var(--dock-pane)]`} data-viewer-pane="">
+                {!welcomeDone && film.film && !film.film.tracks.some((t) => t.clips.length) ? (
+                  <Welcome onDismiss={() => setWelcomeDone(true)}
+                    onImport={() => { setWelcomeDone(true); openFrameTool('media'); }}
+                    onStart={(tab) => { setWelcomeDone(true); openFrameTool(tab); }} />
+                ) : null}
                 <div className={PANE_BAR}>
-                  {hostAssets ? null : (
-                  <Tooltip label={t(assetsPaneOpen && assetsFit ? 'assetsPane.hide' : 'assetsPane.show')} side="bottom">
-                    <button type="button"
-                      onClick={() => {
-                        if (assetsPaneOpen && assetsFit) { setAssetsPaneOpen(false); return; }
-                        setAssetsPaneOpen(true);
-                        /* asked for in a window too narrow for all three: the inspector makes room */
-                        if (!assetsFit) setInspectorOpen(false);
-                      }}
-                      aria-label={t(assetsPaneOpen && assetsFit ? 'assetsPane.hide' : 'assetsPane.show')}
-                      className={`${PANE_TOGGLE} ${assetsPaneOpen && assetsFit ? PANE_BTN_ON : ''}`}>
-                      <LibraryBig size={PANE_TOGGLE_ICON} />
-                    </button>
-                  </Tooltip>
-                  )}
                   <Tooltip label={t(layersShown ? 'layers.hidePane' : 'layers.showPane')} side="bottom">
                     <button type="button"
                       onClick={() => {
@@ -2857,7 +2999,7 @@ export function ProjectView({ projectId, onProject, onLeave }: {
                     </div>
                   ) : null}
                   {value ? (
-                    <div ref={stageFullRef} className={`relative flex h-full w-full items-center justify-center ${fullscreen ? 'bg-black' : ''}`}
+                    <div ref={stageFullRef} className={`flex h-full w-full items-center justify-center ${windowFull ? 'fixed inset-0 z-[200]' : 'relative'} ${fullscreen ? 'bg-black' : ''}`}
                       style={{ containerType: 'size' }} onClick={fullscreen ? toggle : undefined}>
                       <div className={`relative bg-black ${frameBox.inner.left < -0.5 || frameBox.inner.top < -0.5 ? 'overflow-hidden' : 'overflow-visible'}`}
                         style={{ ...fitBox(frameBox.w, frameBox.h), containerType: 'size' }}>
@@ -2969,6 +3111,7 @@ export function ProjectView({ projectId, onProject, onLeave }: {
                   </div>
                 ) : null}
                 <ViewerBar
+                  transport={false}
                   timeMs={timeMs}
                   clock={clock}
                   totalMs={totalMs}
@@ -2987,6 +3130,7 @@ export function ProjectView({ projectId, onProject, onLeave }: {
 
               {inspectorShown ? (
                 <>
+                  <InspectorSlide shown={inspectorShown} />
                   <PaneDivider width={inspectorShownWidth} onResize={commitInspectorWidth} containerRef={viewerRowRef} label={t('inspector.resize')} min={MIN_INSPECTOR} minRest={MIN_VIEWER} side="end" />
                   {typeof inspectorContent === 'object' ? (
                     <ResourceInspector file={inspectorContent} url={(pickedSaved && inspectorContent === pickedMedia ? savedSources : mediaSources).file(inspectorContent)} width={inspectorShownWidth} onClose={closeInspector} />
@@ -2996,9 +3140,12 @@ export function ProjectView({ projectId, onProject, onLeave }: {
                       width={inspectorShownWidth}
                       onClose={closeInspector}
                     />
+                  ) : selectedBlocks.length === 1 && isFrameSrc(selectedBlocks[0].src) ? (
+                    <FrameInspector projectId={projectId} folder={folder} src={selectedBlocks[0].src!} clipId={selectedBlocks[0].clipId} startMs={selectedBlocks[0].startMs} endMs={selectedBlocks[0].endMs} edit={(ops, label) => film.edit(ops, label)} film={film.film} notify={toast.show} timeMs={timeMs} width={inspectorShownWidth} onClose={closeInspector} />
                   ) : (
                     <FontScopeContext.Provider value={fontScope}>
                     <LiveGeometryInspector
+                      trackingPanel={selectedBlocks.length===1&&/\.(mp4|mov|m4v|webm|mkv)(?:[#?]|$)/i.test(selectedBlocks[0].src??'')?(geometry)=><UniversalTracking projectId={projectId} folder={folder} film={film.film} block={selectedBlocks[0]} timeMs={timeMs} geometry={geometry} edit={(ops,label)=>film.edit(ops,label)}/>:undefined}
                       store={geometryStore}
                       element={stageElement}
                       clips={selectedBlocks}
@@ -3056,9 +3203,11 @@ export function ProjectView({ projectId, onProject, onLeave }: {
             {timelineOpen ? <DockPaneDivider height={timelineShownHeight} onResize={commitTimelineHeight} containerRef={dockColRef} label={t('timeline.resize')} /> : null}
             {timelineOpen && value ? (
               <div className={`${PANE} shrink-0 bg-[var(--dock-pane)]`} style={{ height: timelineShownHeight }}>
-                <div className="absolute inset-0 flex min-h-0 min-w-0 flex-col" data-timeline-scope="main" style={{ right: METERS_W }}
+                <div className={`absolute inset-0 flex min-h-0 min-w-0 flex-col transition-[opacity,transform,filter] duration-[380ms] ease-[cubic-bezier(.2,.8,.2,1)] ${mixerOn ? 'pointer-events-none translate-y-[10px] scale-[0.99] opacity-0 blur-[2px]' : ''}`} data-timeline-scope="main" style={{ right: METERS_W }}
+                  aria-hidden={mixerOn || undefined}
                   onPointerDownCapture={() => { setBarAt('timeline'); if (pickedMedia) pickMedia(null); }}>
                   <Timeline
+                    transport={<Transport timeMs={timeMs} clock={clock} totalMs={totalMs} playing={playing} onPlayPause={toggle} />}
                     blockMenuExtra={timelineMenuExtra}
                     chat={timelineChat}
                     {...(hostHover ? { onHoverBlock: hoverBlock } : {})}
@@ -3081,7 +3230,8 @@ export function ProjectView({ projectId, onProject, onLeave }: {
                     relinkCandidates={relinkCandidates}
                     onRelink={(block, path) => void relinkBlock(block, path)}
                     onViewChange={setThumbView}
-                    tracks={tools.tracks}
+                    /* a transition plays between two clips: it is drawn there (TransitionMarks), not as a row of its own */
+                    tracks={shownTracks}
                     totalMs={totalMs}
                     timeMs={timeMs}
                     clock={playing ? clock : null}
@@ -3116,10 +3266,28 @@ export function ProjectView({ projectId, onProject, onLeave }: {
                     waveUrl={waveUrl}
                     history={timelineHistory}
                     {...tools.timeline}
+                    titleOf={clipTitle}
+                    toolbarEnd={<MixerSwitch on={mixerOn} onToggle={() => setMixerOn((v) => !v)} />}
+                    trackOverlay={(track, px) => <>{tools.timeline.trackOverlay?.(track, px)}{subOverlay(track, px)}{keyOverlay(track, px)}{trOverlay(track, px)}</>}
                   />
                 </div>
                 {/* the audio meters, beside the timeline */}
-                <div className="absolute inset-y-0 right-0"><AudioMeters levels={tools.levels} playing={playing} /></div>
+                <div className={`absolute inset-y-0 right-0 transition-opacity duration-300 ${mixerOn ? 'pointer-events-none opacity-0' : ''}`}><AudioMeters levels={tools.levels} playing={playing} /></div>
+                {/* the timeline as a mixer: it takes the timeline's place (and only that), sliding in */}
+                <div className={`absolute inset-0 flex min-h-0 flex-col transition-[opacity,transform] duration-[380ms] ease-[cubic-bezier(.2,.8,.2,1)] ${mixerOn ? '' : 'pointer-events-none translate-y-[14px] opacity-0'}`} aria-hidden={!mixerOn || undefined} data-mixer="">
+                  {mixerShown ? <>
+                    <div className="flex h-[40px] shrink-0 items-center gap-2 border-b px-2.5" style={{ background: 'var(--tl-head)', borderColor: 'var(--tl-line)' }}>
+                      <span className="pl-1 text-[12.5px] font-semibold text-[var(--text)]">Mixer</span>
+                      <span className="text-[11.5px] text-[var(--text-muted)]">Volume for each clip with sound</span>
+                      <div className="flex min-w-0 flex-1 justify-center"><Transport timeMs={timeMs} clock={clock} totalMs={totalMs} playing={playing} onPlayPause={toggle} /></div>
+                      <MixerSwitch on={mixerOn} onToggle={() => setMixerOn((v) => !v)} />
+                    </div>
+                    <div className="min-h-0 flex-1">
+                      <MixerView tracks={timelineTracks} clock={clock} playing={playing} waveUrl={waveUrl} edit={editOps} titleOf={clipTitle}
+                        master={<AudioMeters big levels={tools.levels} playing={playing} />} />
+                    </div>
+                  </> : null}
+                </div>
               </div>
             ) : null}
           </section>
@@ -3143,7 +3311,6 @@ export function ProjectView({ projectId, onProject, onLeave }: {
           {mediaPool()}
         </div>
       ) : null}
-      <DesktopDialog open={desktopOpen} onClose={() => setDesktopOpen(false)} />
       <ExportCenter
         open={exportOpen}
         onClose={() => { setExportOpen(false); setExportClipId(null); }}
@@ -3220,4 +3387,36 @@ function PanelSeam({ panel, bottom }: { panel: HostPanel; bottom: number }) {
         panel.setWidth(panel.width + (e.key === 'ArrowLeft' ? 24 : -24), true);
       }} />
   );
+}
+
+/** The switch between the timeline and its mixer. */
+function MixerSwitch({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle} onMouseDown={(e) => e.preventDefault()} aria-pressed={on} title={on ? 'Back to the timeline' : 'Mixer: a volume fader for each clip with sound'}
+      className={`flex h-[28px] shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-[12px] font-medium transition ${on ? 'text-[var(--tl-accent)]' : 'text-[var(--text-dim)] hover:bg-black/5'}`}>
+      <SlidersVertical size={15} />{on ? 'Timeline' : 'Mixer'}
+    </button>
+  );
+}
+
+/**
+ * The inspector slides in from the right as it opens, and out as it closes. Closing takes its content away (nothing is
+ * selected any more), so what slides out is a picture of it: a copy of its element, eased out over the viewer.
+ */
+function InspectorSlide({ shown }: { shown: boolean }) {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  React.useLayoutEffect(() => {
+    const pane = ref.current?.nextElementSibling?.nextElementSibling as HTMLElement | null | undefined;
+    if (!pane) return undefined;
+    pane.animate([{ opacity: 0, transform: 'translateX(18px)' }, { opacity: 1, transform: 'none' }], { duration: 340, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    return () => {
+      const box = pane.getBoundingClientRect();
+      if (!box.width || !pane.isConnected) return;
+      const ghost = pane.cloneNode(true) as HTMLElement;
+      Object.assign(ghost.style, { position: 'fixed', left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`, margin: '0', zIndex: '40', pointerEvents: 'none' });
+      document.body.appendChild(ghost);
+      ghost.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(22px)' }], { duration: 300, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }).finished.finally(() => ghost.remove());
+    };
+  }, [shown]);
+  return <span ref={ref} hidden aria-hidden />;
 }

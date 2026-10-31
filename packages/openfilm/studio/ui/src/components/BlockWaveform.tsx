@@ -109,8 +109,10 @@ async function loadWave(url: string): Promise<Wave | null> {
 }
 
 export function BlockWaveform({
-  url, width, height, color, inMs = 0, durMs, visiblePx,
+  url, width, height, color, inMs = 0, durMs, visiblePx, mirror = false,
 }: {
+  /** Drawn from the middle, both ways (iMovie's sound clips), instead of up from the bottom. */
+  mirror?: boolean;
   url: string;
   width: number;
   height: number;
@@ -182,20 +184,21 @@ export function BlockWaveform({
       for (let x = 0; x < drawW; x += 1) {
         const v = columns[x]!;
         const h = Math.max(1, v * height);
-        ctx.rect(x, height - h, 1, h);
+        if (mirror) ctx.rect(x, (height - h) / 2, 1, h);
+        else ctx.rect(x, height - h, 1, h);
       }
       ctx.fill();
     };
     const timer = window.setTimeout(() => drawSoon(el, draw), performance.now() - drawnAt.current < BURST_MS ? BURST_MS : 0);
     return () => { window.clearTimeout(timer); waiting.delete(el); };
-  }, [wave, width, height, color, inMs, durMs, from, sliceW, theme]);
+  }, [wave, width, height, color, inMs, durMs, from, sliceW, theme, mirror]);
 
   if (!wave?.peaks.length || sliceW <= 0) return null;
   return (
     <canvas
       ref={ref}
       className="pointer-events-none absolute bottom-0"
-      style={{ left: from, width: sliceW, height, color }}
+      style={{ left: from, width: sliceW, height, color, bottom: mirror ? 2 : 0 }}
     />
   );
 }

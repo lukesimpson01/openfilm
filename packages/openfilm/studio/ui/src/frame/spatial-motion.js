@@ -1,0 +1,10 @@
+import{motionAt,quaternionFromEuler,quaternionProduct,quaternionInverse,quaternionEuler}from'./motion3d.js';import{anchorFrame}from'./spatial-geometry.js';
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],coordinates=(B,p)=>{const d=dot(B[0],cross(B[1],B[2]));return [dot(p,cross(B[1],B[2])),dot(p,cross(B[2],B[0])),dot(p,cross(B[0],B[1]))].map(v=>v/d);};
+const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),sub=(a,b)=>a.map((v,i)=>v-b[i]);
+export function putSpatialKey(item,t,patch={}){const state=motionAt(item.motion,t),key={t,p:[...state.p],r:[...state.r],scale3:[...(state.scale3??[1,1,1])],o:state.o??1,...patch};key.q=quaternionFromEuler(key.r);return {...item,motion:{...item.motion,segmentEase:true,curved:false,keys:[...(item.motion?.keys??[]).filter(k=>Math.abs(k.t-t)>.001),key].sort((a,b)=>a.t-b.t)}};}
+export function editSpatialPose(item,frame,t,record,pose){
+ const base=item.spatialAnchor,current=anchorFrame(base,motionAt(item.motion,t),pose),delta=sub(frame.position,current.position),ratio=frame.scale.map((s,i)=>s/current.scale[i]);
+ const evaluated=anchorFrame({...frame,offset:[0,0,0],depthOffset:0},null,pose),basis=[base.right,base.down,base.normal],columns=[evaluated.right,evaluated.down,evaluated.normal],R=basis.map(a=>columns.map(b=>dot(a,b))),angles=[Math.atan2(R[2][1],R[2][2]),Math.asin(Math.max(-1,Math.min(1,-R[2][0]))),Math.atan2(R[1][0],R[0][0])].map(v=>v*180/Math.PI);
+ if(record){const state=motionAt(item.motion,t),translation=base.motionSpace==='world'?delta:coordinates(basis,delta);return putSpatialKey(item,t,{p:state.p.map((v,i)=>v+translation[i]),r:quaternionEuler(quaternionProduct(quaternionInverse(quaternionFromEuler(base.rotation??[0,0,0])),quaternionFromEuler(angles))),scale3:(state.scale3??[1,1,1]).map((v,i)=>v*ratio[i])});}
+ const state=motionAt(item.motion,t);return {...item,spatialAnchor:{...base,position:base.position.map((v,i)=>v+delta[i]),rotation:quaternionEuler(quaternionProduct(quaternionFromEuler(angles),quaternionInverse(state.q??quaternionFromEuler(state.r)))),scale:(base.scale??[1,1,1]).map((v,i)=>v*ratio[i])}};
+}

@@ -141,7 +141,7 @@ export const ExportTray = React.forwardRef<ExportTrayHandle, { projectId: string
   return (
     <div
       style={{ right: 16 + inset }}
-      className="pointer-events-auto fixed bottom-4 z-[120] w-[340px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]"
+      className="pointer-events-auto fixed bottom-4 z-[120] w-[340px] max-w-[calc(100vw-32px)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]"
     >
       <div className="flex items-center gap-2 border-b border-[var(--border-soft)] px-3.5 py-2.5">
         {!ended ? <Loader2 size={14} className="shrink-0 animate-spin text-[var(--text-muted)]" />

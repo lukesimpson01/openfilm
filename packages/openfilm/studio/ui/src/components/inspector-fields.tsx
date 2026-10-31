@@ -81,8 +81,11 @@ function useSectionClosed(id: string, closedByDefault: boolean): [boolean, (v: b
  * A section: its title folds it away (remembered per section, for every selection alike), `aside` holds its actions
  * (reset, add) and stays while folded.
  */
+/* Progressive disclosure: what most edits need (where it is, its text, its sound) opens at once; the precision groups
+   start folded until someone opens them, and each stays the way it was last left. */
+const FOLDED_BY_DEFAULT = new Set(['crop', 'mask', 'adjust', 'effects', 'fades', 'appearance', 'timing', 'advanced', 'stroke', 'page-changes', 'film-info', 'film-rate']);
 export function Section({
-  id, title, aside, closedByDefault = false, children,
+  id, title, aside, closedByDefault = FOLDED_BY_DEFAULT.has(id), children,
 }: {
   /** Which section, for remembering it folded: the same id for a clip's and a layer's. */
   id: string;

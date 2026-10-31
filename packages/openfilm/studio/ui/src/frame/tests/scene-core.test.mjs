@@ -1,0 +1,30 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import { planeMap,pointInside,constrainPoint,sceneItem,planeTextMetrics,choosePlane,projectionVisibility,referenceInScene,surfaceCandidates } from '../scene-geometry.js';
+import { apply,pinVisibilityAt } from '../track-core.js';
+import { spatialTimes,retimeSpatial } from '../spatial-keys.js';
+import { motionAt,camera3dPreset } from '../motion3d.js';
+import {refineScenePlanes} from '../scene-refinement.js';
+test('a wall map reaches all four perspective corners',()=>{const q=[[20,30],[240,70],[215,330],[25,390]],H=planeMap(q);for(const [i,p] of [[0,[0,0]],[1,[1,0]],[2,[1,1]],[3,[0,1]]]){const v=apply(H,p);assert.ok(Math.hypot(v[0]-q[i][0],v[1]-q[i][1])<1e-6);}});
+test('standing titles are constrained to the corridor floor and receive the scene boundary',()=>{const scene={planes:[{kind:'floor',name:'corridor floor',confidence:.9,quad:[[.35,.5],[.65,.5],[1,1],[0,1]]}],safePolygon:[[.2,.1],[.8,.1],[1,1],[0,1]]},it=sceneItem({anchor:[0,100],size:50,place:'standing'},scene,320,480);assert.ok(pointInside(it.anchor,scene.planes[0].quad.map(p=>[p[0]*320,p[1]*480])));assert.equal(it.sceneClip.length,4);});
+test('wall text uses the wall projective frame rather than a global text rotation',()=>{const quad=[[0,0],[80,30],[75,170],[0,200]],m=planeTextMetrics(quad,[40,100],20,3);assert.ok(m.size.every(n=>n>0&&Number.isFinite(n)));const center=apply(planeMap(quad),m.anchor);assert.ok(Math.hypot(center[0]-40,center[1]-100)<1e-6);});
+test('presets, model actions and camera keys all contribute timeline diamonds',()=>{assert.deepEqual(spatialTimes({camera:{motion:{keys:[{t:0},{t:2}]}},objects:[{motion:{keys:[{t:1},{t:3}]},animations:[{at:3,duration:2}]}]}),[0,1000,2000,3000,5000]);});
+test('retiming a shared action boundary changes both adjoining actions without adding another model',()=>{const l={objects:[{motion:{keys:[{t:0,p:[0,0,0]},{t:2,p:[1,0,0]},{t:4,p:[2,0,0]}]},actions:[{at:0,duration:2,type:'move'},{at:2,duration:2,type:'turn'}]}]};const changed=retimeSpatial(l,2,2.5);assert.equal(changed.objects.length,1);assert.equal(changed.objects[0].motion.keys[1].t,2.5);assert.equal(changed.objects[0].actions[0].duration,2.5);assert.equal(changed.objects[0].actions[1].duration,1.5);assert.equal(l.objects[0].motion.keys[1].t,2);});
+test('movement can hold an evaluated pose while retaining its editable keys',()=>{const m={keys:[{t:0,p:[-1,0,0]},{t:2,p:[1,0,0]}]},pose=motionAt(m,1,4);assert.deepEqual(motionAt({...m,enabled:false,holdPose:pose},3,4).p,pose.p);assert.equal(camera3dPreset('manual',4).keys.length,1);});
+test('a wall pin fades after lost tracking and never teleports across a cut',()=>{const result={frames:[{t:0},{t:1},{t:1.05,lost:true},{t:1.3,lost:true},{t:2,ref:true}],cuts:[2]};assert.equal(pinVisibilityAt(result,.5),1);assert.ok(pinVisibilityAt(result,1.1)>0&&pinVisibilityAt(result,1.1)<1);assert.equal(pinVisibilityAt(result,1.3),0);assert.equal(pinVisibilityAt(result,2.1),0);});
+test('wall text fits within the selected plane even with a very long title',()=>{const m=planeTextMetrics([[0,0],[40,20],[40,300],[0,320]],[20,160],100,12);assert.ok(m.size[0]<=.901);assert.ok(m.size[1]>0);assert.equal(planeMap([[0,0],[1,1],[0,1],[1,0]]),null);});
+test('the clicked end wall wins over a larger side wall and retains the exact selected anchor',()=>{
+ const scene={planes:[{kind:'wall',name:'side',confidence:.95,quad:[[0,0],[.6,.3],[.6,.7],[0,1]]},{kind:'wall',name:'end',confidence:.9,quad:[[.4,.3],[.7,.3],[.7,.7],[.4,.7]]}]};
+ assert.equal(choosePlane(scene,'auto',[.55,.5]).name,'end');
+ const item=sceneItem({anchor:[55,50],size:10},scene,100,100,'auto',[{name:'end',track:'end.json'}]);assert.deepEqual(item.anchor,[55,50]);assert.equal(item.track,'end.json');assert.equal(item.place,'surface');
+ const candidates=surfaceCandidates(scene,100,100);assert.equal(candidates.length,6);assert.notEqual(candidates[0].quad[0][1],candidates[0].quad[1][1]);
+ const H=[1,0,10,0,1,5,0,0,1],tracks={'end.json':{frames:[{t:0,H}]}};
+ const p=referenceInScene(scene,[{name:'end',track:'end.json'}],tracks,0,[65,55],100,100,[1,0,0,0,1,0,0,0,1]);assert.deepEqual(p,[55,50]);
+});
+test('projected text fades before a homography crosses the camera or grows unreasonably large (a 20x approach still shows)',()=>{assert.equal(projectionVisibility([1,0,0,0,1,0,0,0,1],[10,20]),1);assert.equal(projectionVisibility([20,0,0,0,20,0,0,0,1],[10,20]),1);assert.equal(projectionVisibility([80,0,0,0,80,0,0,0,1],[10,20]),0);assert.equal(projectionVisibility([1,0,0,0,1,0,0,0,-1],[10,20]),0);});
+test('visible wall-return edges separate receding and front-facing surfaces, while blank pixels add no plane',()=>{
+ const w=240,h=400,scene={summary:'A corridor',planes:[{kind:'wall',name:'right wall',confidence:.9,quad:[[.6,.18],[1,0],[1,.95],[.6,.62]]},{kind:'wall',name:'end wall with door',confidence:.9,quad:[[.28,.18],[.6,.18],[.6,.62],[.28,.62]]}]},blank=new Uint8Array(w*h),image=new Uint8Array(w*h);
+ for(let y=12;y<320;y++)for(let x=0;x<w;x++)image[y*w+x]=x<w*.72?120:200;
+ assert.equal(refineScenePlanes(scene,blank,w,h).planes.length,2);
+ const refined=refineScenePlanes(scene,image,w,h),inner=refined.planes.find(p=>p.name==='right inner wall'),front=refined.planes.find(p=>p.name==='right foreground wall face');
+ assert.ok(inner&&front);assert.ok(inner.edgeVerified);assert.ok(Math.abs(inner.quad[1][0]-.72)<.02);assert.ok(inner.quad[0][1]>inner.quad[1][1]);assert.equal(front.quad[0][1],front.quad[1][1]);
+});

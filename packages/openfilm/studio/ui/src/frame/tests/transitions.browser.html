@@ -1,0 +1,43 @@
+<!doctype html><meta charset="utf-8"><title>Transition acceptance tests</title>
+<pre id="out">running…</pre>
+<script type="module">
+/* Section 8 of the transitions brief, run in a browser with WebGL2 (node has no GPU):
+   endpoints, determinism, no black edges for motion, and a param sweep at min and max. */
+import { TransitionRenderer } from './transition-gl.js';
+import { TRANSITIONS } from './transitions-catalog.js';
+const W = 108, H = 192;
+const pattern = (hueA, hueB) => { const c = document.createElement('canvas'); c.width = 270; c.height = 480; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 270, 480); gr.addColorStop(0, `hsl(${hueA} 80% 55%)`); gr.addColorStop(1, `hsl(${hueB} 80% 45%)`); g.fillStyle = gr; g.fillRect(0, 0, 270, 480);
+  for (let i = 0; i < 40; i++) { g.fillStyle = `hsl(${(hueA + i * 37) % 360} 70% ${40 + (i % 5) * 8}%)`; g.fillRect((i * 53) % 250, (i * 97) % 460, 20, 20); } return c; };
+const A = pattern(200, 260), B = pattern(20, 60);
+const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+const r = new TransitionRenderer(canvas);
+const gl = r.gl;
+const read = () => { const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+const draw = (id, p, extra = {}) => { r.render(A, B, p, { id, seed: 7, ...extra }); return read(); };
+const diff = (a, b) => { let m = 0; for (let i = 0; i < a.length; i += 4) for (let k = 0; k < 3; k++) m = Math.max(m, Math.abs(a[i + k] - b[i + k])); return m; };
+const black = (a) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] + a[i + 1] + a[i + 2] === 0) n++; return n; };
+const refA = draw('classic.mix', 0), refB = draw('classic.mix', 1);
+const fails = []; let checks = 0;
+for (const t of TRANSITIONS) {
+  const dirs = t.directions ?? [undefined];
+  for (const direction of dirs) {
+    const name = t.id + (direction ? `/${direction}` : '');
+    const d0 = diff(draw(t.id, 0, { direction }), refA), d1 = diff(draw(t.id, 1, { direction }), refB); checks += 2;
+    if (d0 > 1) fails.push(`${name}: p=0 differs from A by ${d0}/255`);
+    if (d1 > 1) fails.push(`${name}: p=1 differs from B by ${d1}/255`);
+    // Check the formula beside each endpoint too: an exact-frame guard must not
+    // hide a lens, permanent film border or an unfinished half of a split.
+    const nearStart = diff(draw(t.id, 0.000001, { direction }), refA), nearEnd = diff(draw(t.id, 0.999999, { direction }), refB); checks += 2;
+    if (nearStart > 16) fails.push(`${name}: discontinuity near A (${nearStart}/255)`);
+    if (nearEnd > 16) fails.push(`${name}: discontinuity near B (${nearEnd}/255)`);
+    const x = draw(t.id, 0.5, { direction }), y = draw(t.id, 0.5, { direction }); checks++;
+    if (diff(x, y) !== 0) fails.push(`${name}: not deterministic`);
+    if (t.motion) for (const p of [0.25, 0.5, 0.75]) { checks++; const n = black(draw(t.id, p, { direction })); if (n > 0) fails.push(`${name}: ${n} black pixels at p=${p}`); }
+    for (const v of [0, 1]) { checks++; const o = draw(t.id, 0.5, { direction, intensity: v, feather: v * 0.2, motionBlur: v, hold: v * 0.4, strips: v ? 20 : 1, grain: v });
+      if (o.some((c, i) => i % 4 === 3 && c !== 255)) fails.push(`${name}: bad alpha at param ${v}`); }
+  }
+}
+document.getElementById('out').textContent = `${checks} checks, ${fails.length} failures\n` + fails.join('\n');
+window.__result = { checks, fails };
+</script>

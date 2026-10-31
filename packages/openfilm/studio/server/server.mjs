@@ -21,8 +21,9 @@ import { pipeline } from 'node:stream';
 import { mkdir, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { recordingIssue } from '../../src/recording-identity.mjs';
 import { EditError, editProjectFilm, pageClipLook, readProjectFilm } from './film.mjs';
-import { FileError, bringIn, collect, extractAudio, freezeFrame, importFile, inside, listFiles, makeFolder, moveCheck, moveFile, readable, relink, trashFile } from './files.mjs';
+import { FileError, bringIn, collect, extractAudio, freezeFrame, importFile, inside, writeFrameFile, listFiles, makeFolder, moveCheck, moveFile, readable, relink, trashFile } from './files.mjs';
 import { ExportError, createExports, draftApps, exportCapabilities, exportsRoot, projectSizes } from './exports.mjs';
 import { MediaError, frame, loudness, poster, probe, waveform } from './derived.mjs';
 import { HistoryError, checkout, commitChanges, deleteBranch, discardChanges, historyFiles, log, mergeBranch, renameBranch, restoreCommit, status as historyStatus } from './history.mjs';
@@ -61,6 +62,8 @@ import { LOCATION_KEYS, chooseFolder, locations, usableFolder } from '../../src/
 import { doctor } from '../../src/doctor.mjs';
 import { recentProblems } from '../../src/problems.mjs';
 import { exportDiagnostics } from './diagnostics.mjs';
+import {prepareScanPreview,scanPreviewFile} from './scan-preview.mjs';
+import {spatialStatus,startSpatialJob,spatialJob,sourceFingerprint}from'./spatial-jobs.mjs';
 
 /** @typedef {import('./http.mjs').Req} Req @typedef {import('./http.mjs').Res} Res */
 
@@ -199,6 +202,19 @@ export async function startStudio({ port = 4747, key, openBrowser = systemBrowse
     }
 
     authorize(req);
+    // Recordings live with Clyra, but are served by the editor that is actually open. Audio must not depend on a
+    // second, possibly stopped, Shorts process (nor lose browser playback permission during a cross-origin fetch).
+    if (path.startsWith('/api/editor-audio/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const root = resolve(process.env.CLYRA_RECORDINGS_DIR || fileURLToPath(new URL('../../../../../../../shorts-library/', import.meta.url)));
+      const library = await readFile(join(root, 'recordings.json'), 'utf8').then(JSON.parse).catch(() => ({}));
+      if (path === '/api/editor-audio/library') return json(res, 200, { recordings: library });
+      const recordingId=decodeURIComponent(path.slice('/api/editor-audio/'.length)),entry = library[recordingId];
+      if (!entry?.file) throw new HttpError(404, 'The original recording is unavailable.');
+      const issue=recordingIssue(recordingId,entry);if(issue)throw new HttpError(409,issue);
+      const file = resolve(root, entry.file);
+      if (!file.startsWith(root + sep) || !realpathSync(file).startsWith(realpathSync(root) + sep)) throw new HttpError(400, 'Invalid recording path.');
+      return sendMedia(req, res, file);
+    }
     const parts = path.slice('/api/'.length).split('/').map(decodeURIComponent);
 
     /* stop: another app is taking over this machine's Studio, or `openfilm open` starts it afresh (`whenIdle`: not
@@ -548,6 +564,15 @@ export async function startStudio({ port = 4747, key, openBrowser = systemBrowse
     }
     const project = await projectById(parts[1]);
     const rest = parts.slice(2).join('/');
+    if(rest==='spatial/source'&&req.method==='GET')return json(res,200,await sourceFingerprint(project.path,url.searchParams.get('src')));
+    if(rest==='spatial/status'&&req.method==='GET')return json(res,200,spatialStatus());
+    if(rest==='spatial/jobs'&&req.method==='POST')return json(res,202,await startSpatialJob(project.path,await readJson(req)));
+    if(parts[2]==='spatial'&&parts[3]==='jobs'&&parts[4]&&['GET','DELETE'].includes(req.method??''))return json(res,200,spatialJob(project.path,parts[4],req.method==='DELETE'));
+    if(rest==='scan-preview'&&req.method==='POST'){
+      const {src,from,to}=await readJson(req),preview=await prepareScanPreview(project.path,String(src),Number(from),Number(to));
+      return json(res,200,{url:`/api/projects/${encodeURIComponent(project.id)}/scan-preview/${preview.id}`});
+    }
+    if(parts[2]==='scan-preview'&&parts[3]&&(req.method==='GET'||req.method==='HEAD'))return sendMedia(req,res,scanPreviewFile(project.path,parts[3]));
     /* a project whose folder is gone (moved, renamed or deleted outside Studio): taking it off the list is all there is */
     if (!existsSync(project.path) && !(!rest && req.method === 'DELETE')) {
       throw new HttpError(410, 'This project’s folder is not there any more: it was moved, renamed or deleted.', { code: 'missing' });
@@ -764,6 +789,7 @@ export async function startStudio({ port = 4747, key, openBrowser = systemBrowse
       const at = url.searchParams.get('path') ?? '';
       if (req.method === 'GET') return json(res, 200, await listFiles(project.path));
       /* the body is the file itself, streamed to disk: an import of any size */
+      if (req.method === 'PUT' && url.searchParams.get('overwrite') === '1') return json(res, 200, await writeFrameFile(project.path, at, req));
       if (req.method === 'PUT') {
         const { path: landed } = await importFile(project.path, at, req);
         /* a picture, video or sound that cannot be read (a broken or mislabelled file) is kept, and said: it would
@@ -873,7 +899,7 @@ export async function startStudio({ port = 4747, key, openBrowser = systemBrowse
         const body = /** @type {any} */ (await readJson(req));
         /* several at once: `{ jobs: [ask…], folder? }` → `{ exports }`; one: the ask itself → `{ export }` */
         if (body && typeof body === 'object' && 'jobs' in body) return json(res, 200, { exports: exports.startAll(project, body) });
-        return json(res, 200, { export: exports.start(project, body) });
+        return json(res, 200, { export: exports.start(project, body, { folder: body?.folder }) });
       }
     }
     if (parts[2] === 'exports' && parts[3] && req.method === 'DELETE') {
@@ -1102,7 +1128,7 @@ function advertised() {
 
 /* the editor, built (`npm run build:ui`) into studio/ui/dist and shipped with the package */
 const EDITOR_DIR = fileURLToPath(new URL('../ui/dist/', import.meta.url));
-const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
+const TYPES = { '.mp3': 'audio/mpeg', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.wasm': 'application/wasm', '.json': 'application/json', '.tflite': 'application/octet-stream', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 
 /** The editor's files: its assets as they are (named by their content, so kept for good), any other path its page. */
 function sendEditor(/** @type {Res} */ res, /** @type {string} */ dir, /** @type {string} */ path, /** @type {Record<string, string | string[]>} */ headers = {}) {
@@ -1110,8 +1136,9 @@ function sendEditor(/** @type {Res} */ res, /** @type {string} */ dir, /** @type
   if (path.startsWith('/assets/')) {
     const file = normalize(join(root, path));
     if (file.startsWith(root + 'assets' + sep) && existsSync(file) && statSync(file).isFile()) {
-      res.writeHead(200, { 'content-type': TYPES[/** @type {keyof typeof TYPES} */ (extname(file))] ?? 'application/octet-stream', 'cache-control': 'public, max-age=31536000, immutable' });
-      return res.end(readFileSync(file));
+      res.writeHead(200, { 'content-type': TYPES[/** @type {keyof typeof TYPES} */ (extname(file))] ?? 'application/octet-stream', 'content-length': statSync(file).size, 'cache-control': 'public, max-age=31536000, immutable' });
+      /* streamed: FRAME's bundled tracks and gameplay clips are tens of MB */
+      return void createReadStream(file).on('error', () => res.destroy()).pipe(res);
     }
     res.writeHead(404).end();
     return;

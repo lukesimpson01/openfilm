@@ -184,6 +184,7 @@ export const FilmInspector = React.memo(function FilmInspector({
   propsHostOf,
   pictures,
   layerProps,
+  trackingPanel,
 }: {
   element: StageElement | null;
   /** The clips selected on the timeline. A layer picked on the picture wins: one selection at a time. */
@@ -269,6 +270,7 @@ export const FilmInspector = React.memo(function FilmInspector({
   pictures?: StagePictureActions;
   /** A layer made a property of its clip (◇ beside its words, its picture, its showing). */
   layerProps?: LayerPropsActions;
+  trackingPanel?: (geometry:StageGeometry|null)=>React.ReactNode;
 }) {
   const t = useT();
   useCommitBeforeLeaving();
@@ -282,6 +284,7 @@ export const FilmInspector = React.memo(function FilmInspector({
   return (
     <div
       data-film-inspector
+      data-inspector-panel
       className={`${PANE} shrink-0 bg-[var(--dock-pane)]`}
       style={{ width }}
     >
@@ -327,6 +330,7 @@ export const FilmInspector = React.memo(function FilmInspector({
           <ClipPanel
             key={clip.id}
             block={clip}
+            trackingPanel={trackingPanel}
             onMain={mainTrack != null && parseFilmDocLoc(clip.loc ?? '')?.track === mainTrack}
             geometry={geometry && geometry.kind === 'clip' && geometry.loc === clip.loc ? geometry : null}
             onEdit={onEditClips}
@@ -452,14 +456,16 @@ function FilmPanel({
             label={t('inspector.stageShape')}
             value={isFit ? 'original' : preset?.id ?? 'custom'}
             groups={[
+              /* Shorts: the two shapes nearly every video takes come first */
+              { label: 'Popular', choices: [{ value: '9:16', label: '9:16 · TikTok, Reels, Shorts' }, { value: '16:9', label: '16:9 · Full screen' }] },
               {
                 choices: [
                   ...(fit ? [{ value: 'original', label: t('viewer.ratioOriginal') }] : []),
                   ...(preset || isFit ? [] : [{ value: 'custom', label: t('viewer.frameCustom') }]),
                 ],
               },
-              { choices: CANVAS_RATIOS.filter((r) => r.group === 'wide').map((r) => ({ value: r.id, label: canvasRatioLabel(t, r) })) },
-              { choices: CANVAS_RATIOS.filter((r) => r.group === 'tall').map((r) => ({ value: r.id, label: canvasRatioLabel(t, r) })) },
+              { label: 'More shapes', choices: CANVAS_RATIOS.filter((r) => r.group === 'wide' && r.id !== '16:9').map((r) => ({ value: r.id, label: canvasRatioLabel(t, r) })) },
+              { choices: CANVAS_RATIOS.filter((r) => r.group === 'tall' && r.id !== '9:16').map((r) => ({ value: r.id, label: canvasRatioLabel(t, r) })) },
             ].filter((g) => g.choices.length)}
             onPick={(id) => {
               if (id === 'original') { if (fit) onCanvas?.(fit); } else if (id !== 'custom') onCanvas?.(id as FilmFrameId);
@@ -1485,9 +1491,11 @@ function clipsLook(
 function ClipPanel({
   block, onMain, geometry, stage, badges, onEdit, onPreviewClip, pageChangesOf, replaceEntries, clipLookOf, onPreviewLook, onStartCrop, onEditMask, maskAsk, onMaskAsked, fades,
   propsHostOf,
+  trackingPanel,
 }: {
   fades?: ReadonlyMap<string, FadeMs>;
   propsHostOf?: (block: TimelineBlock) => PropsHost | null;
+  trackingPanel?: (geometry:StageGeometry|null)=>React.ReactNode;
   replaceEntries?: (block: TimelineBlock) => ContextMenuEntry[];
   block: TimelineBlock;
   /** On the main track, where the magnet acts. */
@@ -1552,6 +1560,7 @@ function ClipPanel({
       {refusal ? (
         <RefusalBanner message={refusal} onDismiss={() => setRefusal(null)} t={t} />
       ) : null}
+      {trackingPanel?.(geo)}
       {!editable ? (
         <p className="mx-3 rounded-[6px] bg-[var(--fill-tsp)] px-2.5 py-2 text-[11px] text-[var(--text-muted)]">
           {t('inspector.noEdit')}

@@ -96,11 +96,42 @@ function place(c, box) {
   const page = c.kind === 'page';
   c.w = page ? c.nw : at.w; c.h = page ? c.nh : at.h;
   const k = page ? ` scale(${at.w / c.nw}, ${at.h / c.nh})` : '';
+  c.placeCss = `translate(${at.x + at.w / 2}px, ${at.y + at.h / 2}px) rotate(${at.r}deg) translate(${-at.w / 2}px, ${-at.h / 2}px)${k}`;
   Object.assign(c.el.style, {
     position: 'absolute', left: '0', top: '0', right: 'auto', bottom: 'auto', margin: '0', translate: 'none', rotate: 'none', scale: 'none',
     width: c.w + 'px', height: c.h + 'px', transformOrigin: '0 0',
-    transform: `translate(${at.x + at.w / 2}px, ${at.y + at.h / 2}px) rotate(${at.r}deg) translate(${-at.w / 2}px, ${-at.h / 2}px)${k}`,
+    transform: (c.camCss ? c.camCss + ' ' : '') + c.placeCss,
   });
+}
+
+/*
+ * Cameras: a page whose film object has `camera(t)` is a camera clip. While one is on (or holding after its end, when
+ * it says so, until another camera starts), it decides how every clip on the tracks below it is viewed: a 2D camera
+ * gives a CSS transform put before each clip's own place (the clips are not changed, only seen through it); a 3D camera
+ * gives its state to the pages below (`window.__filmCamera3d`), which draw their 3D scenes through it. One camera is
+ * active at a time: the one on the highest track (then the one that started last). All of it from t alone.
+ */
+const isCameraSrc = (src) => /(^|\/)layer-cam-[^/]*\.html/.test(src);
+async function applyCameras(t, live) {
+  const cams = clips.filter((c) => c.kind === 'page' && !c.hidden && !c.missing && (isCameraSrc(c.src) || typeof c.child?.camera === 'function'));
+  const active = cams.filter((c) => (t >= c.at && t < c.end) || (c.camHold && t >= c.at && !cams.some((o) => o !== c && o.at > c.at && o.at <= t)));
+  active.sort((a, b) => a.ti - b.ti || b.at - a.at);
+  const views=[];
+  for(const cam of active){
+    if(!cam.child)try{await wake(cam);}catch(e){if(!live)throw e;}
+    if(!cam.child?.camera)continue;
+    const local=sourceAt(cam.span,Math.min(Math.max(0,t-cam.at),cam.span.length),cam.row,cam.native);
+    try{const state=cam.child.camera(local,t);cam.camHold=!!state?.holdAfter;if(state)views.push({cam,state});}catch(e){if(!live)throw new Error(`camera clip "${cam.id}" at ${local}s: ${e?.message??e}`);}
+  }
+  for(const c of clips){
+    if(c.kind==='sound'||cams.includes(c)||!c.el)continue;
+    const applies=({cam,state})=>state.targetClips?(state.targetClips.includes(c.id)||state.targetClips.includes(c.child?.sourceClipId)):c.ti>cam.ti;
+    const two=views.find(v=>v.state.kind==='2d'&&applies(v))?.state??(c.child?.camera3d?null:views.find(v=>v.state.kind==='3d'&&v.state.css&&applies(v))?.state),three=views.find(v=>v.state.kind==='3d'&&applies(v))?.state;
+    const want=two?.css??'';
+    if(c.camCss!==want){c.camCss=want;if(c.placeCss)c.el.style.transform=(want?want+' ':'')+c.placeCss;}
+    if(c.win)try{c.win.__filmCamera3d=three?.camera??null;}catch{/* a page gone */}
+  }
+  document.body.style.background=views.find(v=>v.state.kind==='2d'&&v.state.background)?.state.background??'';
 }
 
 /**
@@ -910,6 +941,7 @@ async function draw(t, live, play = null) {
   footageFrame = live ? ++footageFrames : 0;
   footagePlay = playing ? { rate: play.rate, now: play.now, t } : null;
   try {
+    await applyCameras(t, live);
     await Promise.all(clips.map((c) => drawClip(c, t, live, playing ? play : null, turn, coming, going)));
     if (playing) idleFootage(t);
   } finally {
@@ -969,9 +1001,12 @@ async function drawClip(c, t, live, play, turn, coming, going) {
   const local = sourceAt(c.span, t - c.at, c.row, c.native);
   c.win.filmHost?.time?.(local);
   /* a page's error says which clip and which of its own seconds, not only the film's t */
+  const __t0 = performance.now();
   try { await c.child.frame(local); }
   catch (e) { throw new Error(`clip "${c.id}" (${c.src}) at its ${Number(local.toFixed(3))}s: ${e?.message ?? e}`); }
   c.win.filmHost?.settle?.(local);
+  { const P = (window.__prof ??= { n: {}, ms: {}, max: {}, at: performance.now() }); if (!window.__profHello) { window.__profHello = 1; window.top.postMessage({ filmprof: { hello: location.href } }, '*'); } const k = String(c.src).split('/').pop(); const d = performance.now() - __t0; P.n[k] = (P.n[k] || 0) + 1; P.ms[k] = (P.ms[k] || 0) + d; P.max[k] = Math.max(P.max[k] || 0, d);
+    if (performance.now() - P.at > 2500) { window.top.postMessage({ filmprof: (Object.fromEntries(Object.keys(P.n).map((q) => [q, `${P.n[q]}x avg ${(P.ms[q] / P.n[q]).toFixed(1)}ms max ${P.max[q].toFixed(0)}`]))) }, '*'); window.__prof = null; } }
   if (!live) await mediaShown(c.win.document);
   c.drawn = true;
   override(c, c.preview ?? c.overrides);
@@ -986,6 +1021,9 @@ window.film = {
 
 /* for every tool that plays the film's sound (render, look, Studio's preview and exports): what is heard, where, how
    loud; `src` is a path on the film's origin */
+/* for a camera clip edited live while the film is paused: draw the shown time again, through the camera's new state */
+window.__filmRedraw = () => (shownT == null ? null : draw(shownT, true));
+window.__filmCurrentTime = () => shownT;
 window.__filmSounds = () => sounds;
 /* for a host waiting for `ready`: how many clips have loaded, so a long film still loading is told from a stuck one */
 window.__filmProgress = () => progress;
@@ -1000,6 +1038,19 @@ window.__filmSpans = () => clips.map((c) => ({
   ...(c.kind === 'page' && !c.own ? { reflows: true } : {}),
   ...(c.el ? { look: lookOf(c) } : {}),
 }));
+window.__filmSourceAt = (id, t) => { const c=clips.find(c=>c.id===id);return c?sourceAt(c.span,Math.min(Math.max(0,t-c.at),c.span.length),c.row,c.native):null; };
+/* Exact source-pixel mapping, including box rotation, object fit/position and the active virtual camera. */
+window.__filmClipMap = (id, sw, sh, base=false) => {
+  const c=clips.find(c=>c.id===id);if(!c?.el||!sw||!sh)return null;
+  const css=getComputedStyle(c.el),fit=css.objectFit,scale=fit==='cover'?Math.max(c.w/sw,c.h/sh):Math.min(c.w/sw,c.h/sh),sx=fit==='fill'?c.w/sw:scale,sy=fit==='fill'?c.h/sh:scale,pos=css.objectPosition.split(' '),axis=(text,space)=>text?.endsWith('%')?parseFloat(text)/100*space:parseFloat(text)||0;
+  const x=axis(pos[0],c.w-sw*sx),y=axis(pos[1]??pos[0],c.h-sh*sy),matrix=new DOMMatrix(base?c.placeCss:css.transform).translate(x,y).scale(sx,sy);
+  return {a:matrix.a,b:matrix.b,c:matrix.c,d:matrix.d,e:matrix.e,f:matrix.f};
+};
+addEventListener('message',event=>{
+  const message=event.data;if(event.source!==parent||message?.type!=='tracking-map-request')return;
+  const clip=clips.find(c=>c.id===message.clipId);if(!clip)return;
+  event.source.postMessage({type:'tracking-map-result',clipId:message.clipId,current:window.__filmClipMap(clip.id,message.w,message.h),base:window.__filmClipMap(clip.id,message.w,message.h,true),presentedTime:Number.isFinite(clip.presented)?clip.presented:undefined,sourceTime:window.__filmSourceAt(clip.id,shownT??0),filmTime:shownT??0,fit:clip.el?getComputedStyle(clip.el).objectFit:'contain'},event.origin);
+});
 /**
  * How a picture looks as all of the film's CSS for it makes it (its classes and its own style): what an editor shows.
  * Its opacity is its own, not as a fade has it now.

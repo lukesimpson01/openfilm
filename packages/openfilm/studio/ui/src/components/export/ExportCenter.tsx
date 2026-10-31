@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { SimpleExport } from './SimpleExport';
 
 import { useLanguage, useT } from '@/i18n';
 import { studioHost } from '@/lib/host';
@@ -244,7 +245,9 @@ export interface ExportCenterProps {
 /** What draws or plays the film, and so needs every file it uses. */
 const RENDERS: ReadonlySet<Dest> = new Set(['social', 'video', 'alpha', 'gif', 'audio', 'images', 'slides']);
 
-export function ExportCenter(props: ExportCenterProps) {
+export function ExportCenter(props: ExportCenterProps) { return <SimpleExport {...props} />; }
+
+export function LegacyExportCenter(props: ExportCenterProps) {
   const { open, onClose } = props;
   const t = useT();
   const language = useLanguage();

@@ -37,8 +37,11 @@ export function BrandLoadingScreen({
       className="workspace-shell z-[9000] flex flex-col items-center justify-center bg-[var(--panel)]"
     >
       {/* Kept small: an enlarged logo in the middle of the screen looks like a splash ad, while
-          this screen only means "one moment". The bar below is what moves. */}
-      <span className="text-[var(--text)]"><BrandLogo size={34} /></span>
+          this screen only means "one moment". The logo sits on a soft tile whose glow breathes slowly
+          and faintly (a remount at the handoff is not noticeable); the bar below is what moves. */}
+      <span className="openfilm-loading-tile relative flex h-[68px] w-[68px] items-center justify-center rounded-[20px] border border-[var(--border)] bg-[var(--bg)] text-[var(--text)] shadow-[0_10px_30px_rgba(0,0,0,.08),0_1px_2px_rgba(0,0,0,.05)]">
+        <BrandLogo size={30} />
+      </span>
 
       {labelKey ? (
         <p className="mt-6 text-[14px] font-medium tracking-[-0.01em] text-[var(--text)]">
@@ -48,8 +51,8 @@ export function BrandLoadingScreen({
 
       {/* The bar is fake: opening a project cannot report a percentage. It only says one thing
           here: something is still moving. A line frozen in one place would look stuck. */}
-      <div className="mt-5 h-[3px] w-[180px] overflow-hidden rounded-full bg-[var(--border)]">
-        <div className="openfilm-loading-bar h-full w-1/3 rounded-full bg-[var(--text)]/60" />
+      <div className="mt-4 h-[3px] w-[148px] overflow-hidden rounded-full bg-[var(--border)]">
+        <div className="openfilm-loading-bar h-full w-1/2 rounded-full bg-[linear-gradient(90deg,transparent,var(--accent),transparent)]" />
       </div>
     </div>
   );
