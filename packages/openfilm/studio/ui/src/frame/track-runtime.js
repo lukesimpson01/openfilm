@@ -102,7 +102,9 @@ void main(){ vec2 st = vec2(vUv.x, 1.0 - vUv.y); vec2 ref = toRef(st); if(uUsePl
 /* the subject over everything: the footage where the matte is, its edge feathered / shifted; options for the effects */
 const FG_FS = `precision highp float; varying vec2 vUv; uniform vec4 uRect; uniform sampler2D uVideo; uniform sampler2D uMatte; uniform vec4 uMatteRect;
 uniform float uFeather; uniform float uShift; uniform float uOpacity; uniform float uScale; uniform vec2 uCenter; uniform float uOutline; uniform vec3 uOutlineColor; uniform float uInvert; uniform float uBlur; uniform float uTrace;
-uniform float uGround; uniform int uSubjectsN; uniform vec4 uSubjects[16]; uniform vec2 uMatteSize;
+uniform float uGround; uniform int uSubjectsN; uniform vec4 uSubjects[16]; uniform vec2 uMatteSize; uniform int uExcludeN; uniform vec2 uExclude[32];
+/* a printed figure on the text's own surface (a poster): it is part of the surface, so it does not cover the text */
+bool inQuad(vec2 p, int q){ float sgn = 0.0; for (int i = 0; i < 4; i++) { vec2 a = uExclude[q * 4 + i], b = uExclude[q * 4 + (i == 3 ? 0 : i + 1)]; float c = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x); if (sgn == 0.0) sgn = sign(c); else if (sign(c) != sgn && c != 0.0) return false; } return true; }
 float matteAt(vec2 s){ if (s.x < 0.0 || s.y < 0.0 || s.x > 1.0 || s.y > 1.0) return 0.0; return texture2D(uMatte, uMatteRect.xy + vec2(s.x, s.y) * uMatteRect.zw).r; }
 /* edge-aware upsampling: the mask is analysed small, the footage is full size. Each mask sample counts only as much as
    its footage colour matches this pixel's, so the cut follows the real edge of hair, arms and clothes instead of a soft
@@ -118,6 +120,7 @@ float guidedMatte(vec2 s){
 float alphaAt(vec2 s){ float m = guidedMatte(s); return smoothstep(0.5 - uFeather + uShift, 0.5 + uFeather + uShift, m); }
 void main(){ vec2 st = vec2(vUv.x, 1.0 - vUv.y); st = uCenter + (st - uCenter) / uScale; vec2 s = (st - uRect.xy) / uRect.zw;
   float a = alphaAt(s); if (uInvert > 0.5) a = 1.0 - a; if (s.x < 0.0 || s.y < 0.0 || s.x > 1.0 || s.y > 1.0) a = 0.0;
+  for (int q = 0; q < 8; q++) { if (q >= uExcludeN) break; if (inQuad(s, q)) a = 0.0; }
   if(uGround >= 0.0) { float front = 0.0; for(int i=0;i<16;i++){ if(i>=uSubjectsN) break; vec4 b=uSubjects[i]; if(s.x>=b.x && s.x<=b.z && s.y>=b.y && s.y<=b.w && b.w>=uGround) front=1.0; } a*=front; }
   vec3 col = texture2D(uVideo, vec2(s.x, 1.0 - s.y)).rgb;
   if (uBlur > 0.0) { vec3 acc = vec3(0.0); float n = 0.0; for (int i = -3; i <= 3; i++) for (int j = -3; j <= 3; j++) { vec2 o = vec2(float(i), float(j)) * uBlur * 0.0025; acc += texture2D(uVideo, vec2(s.x + o.x, 1.0 - s.y - o.y)).rgb; n += 1.0; } col = acc / n; }
@@ -196,7 +199,7 @@ export function createTracked(layer, root, options = {}) {
 
   /* the foreground pass(es) */
   const fgMat = () => over(new THREE.ShaderMaterial({ vertexShader: FLAT_VS, fragmentShader: FG_FS, transparent: true, depthTest: false,
-    uniforms: { uRect: { value: new THREE.Vector4() }, uVideo: { value: null }, uMatte: { value: null }, uMatteRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uFeather: { value: 0.12 }, uShift: { value: 0 }, uOpacity: { value: 1 }, uScale: { value: 1 }, uCenter: { value: new THREE.Vector2(0.5, 0.5) }, uOutline: { value: 0 }, uOutlineColor: { value: new THREE.Color('#ffffff') }, uInvert: { value: 0 }, uBlur: { value: 0 }, uTrace: { value: 1 }, uMatteSize: { value: new THREE.Vector2(0, 0) } } }));
+    uniforms: { uRect: { value: new THREE.Vector4() }, uVideo: { value: null }, uMatte: { value: null }, uMatteRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uFeather: { value: 0.12 }, uShift: { value: 0 }, uOpacity: { value: 1 }, uScale: { value: 1 }, uCenter: { value: new THREE.Vector2(0.5, 0.5) }, uOutline: { value: 0 }, uOutlineColor: { value: new THREE.Color('#ffffff') }, uInvert: { value: 0 }, uBlur: { value: 0 }, uTrace: { value: 1 }, uMatteSize: { value: new THREE.Vector2(0, 0) }, uExcludeN: { value: 0 }, uExclude: { value: Array.from({ length: 32 }, () => new THREE.Vector2()) } } }));
   const quad = (mat) => { Object.assign(mat.uniforms, { uGround: { value: -1 }, uSubjectsN: { value: 0 }, uSubjects: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) } }); const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); m.frustumCulled = false; return m; };
   const fg = quad(fgMat()); const bgPass = quad(fgMat()); const extra = quad(fgMat());
   const echoQuads = echoes.map(() => quad(fgMat()));
@@ -340,6 +343,15 @@ export function createTracked(layer, root, options = {}) {
       /* the footage itself, from the same decoded frame as the subject and the objects' tracking, so nothing can drift
          from the picture behind it (the Video line below plays on its own clock) */
       if (main && layer.ownBackground !== false && mode === 'textBehind' && lowest(tt)) { setFg(bgPass, main.v, { matte: null }); const u = bgPass.material.uniforms; u.uMatte.value = null; u.uInvert.value = 1; u.uFeather.value = 0.5; u.uShift.value = 0.5; draw(bgPass); }
+      /* figures printed on an item's own surface (a poster, a screen) stay under the text there: one found when it was
+         placed, and any detected "person" that lies wholly inside the surface without reaching its lower edge (people in
+         front of a hung poster stand on the ground below it; a figure in the print does not) */
+      { const u = fg.material.uniforms; let n = 0; const add = (pts) => { if (n >= 8) return; pts.forEach((c, i) => u.uExclude.value[n * 4 + i].set(c[0] / pw, c[1] / ph)); n++; };
+        const within = (c, q) => { let sg = 0; for (let i = 0; i < 4; i++) { const a = q[i], b = q[(i + 1) % 4], k = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]); if (!k) continue; if (sg && Math.sign(k) !== sg) return false; sg = Math.sign(k); } return true; };
+        for (const p of placed) { const it = p.o.it; if (!it.planeQuad) continue; const q = it.planeQuad.map((c) => apply(p.H, c)), bottom = Math.max(...q.map((c) => c[1])), top = Math.min(...q.map((c) => c[1]));
+          const b0 = it.printedBox; if (b0) add([[b0[0], b0[1]], [b0[2], b0[1]], [b0[2], b0[3]], [b0[0], b0[3]]].map((c) => apply(p.H, c)));
+          for (const sub of m?.info?.subjects ?? []) { const b = sub.box, c4 = [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]; if (c4.every((c) => within(c, q)) && b[3] < bottom - 0.08 * (bottom - top)) add(c4); } }
+        u.uExcludeN.value = n; }
       if (depth === 'auto') {
         for (const p of placed) {
           if(p.o.it.spatialAnchor)continue;

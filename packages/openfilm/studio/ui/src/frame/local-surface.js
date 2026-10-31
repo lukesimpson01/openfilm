@@ -127,12 +127,28 @@ export function trackPatch(grays, times, w, h, k, quad, global = null) {
   const bwd = k > 0 ? runPatch(grays, times, Array.from({ length: k + 1 }, (_, i) => k - i), w, h, quad) : null;
   const frames = [...(bwd ? bwd.frames.slice(1).reverse() : []), ...fwd.frames];
   const Gk = global?.frames && frames.length === global.frames.length ? global.frames[k]?.H : null, Gi = Gk && inv3(Gk);
-  let lastGood = null, lastG = null;
-  frames.forEach((f, i) => {
-    if (!f.lost) { lastGood = f.H; lastG = global?.frames?.[i]?.H ?? null; return; }
-    const G = global?.frames?.[i]?.H;
-    if (lastGood && lastG && G && inv3(lastG)) { f.H = mul3(G, mul3(inv3(lastG), lastGood)); f.lost = false; f.assumed = true; }
-  });
+  /* lost frames: a patch that was leaving the picture keeps its own last motion and leaves (a poster walked past moves
+     much faster than the distant street the camera track follows); one lost anywhere else continues with the camera */
+  const cx = quad.reduce((s2, p) => s2 + p[0], 0) / 4, cy = quad.reduce((s2, p) => s2 + p[1], 0) / 4;
+  const leaving = (A, B) => { const a = apply(A, [cx, cy]), b = apply(B, [cx, cy]), m = 0.14; const nearX = b[0] < w * m ? -1 : b[0] > w * (1 - m) ? 1 : 0, nearY = b[1] < h * m ? -1 : b[1] > h * (1 - m) ? 1 : 0; return (nearX && Math.sign(b[0] - a[0]) === nearX) || (nearY && Math.sign(b[1] - a[1]) === nearY); };
+  const extend = (order) => {
+    let lastGood = null, prevGood = null, lastG = null, run = null;
+    for (const i of order) {
+      const f = frames[i];
+      if (!f.lost && !f.assumed) { prevGood = lastGood; lastGood = f.H; lastG = global?.frames?.[i]?.H ?? null; run = null; continue; }
+      if (!f.lost) continue;
+      if (lastGood && prevGood && (run || leaving(prevGood, lastGood))) { const Pi = inv3(prevGood); if (Pi) { run = run ? mul3(mul3(lastGood, Pi), run) : mul3(mul3(lastGood, Pi), lastGood); f.H = run; f.lost = false; f.assumed = true; continue; } }
+      const G = global?.frames?.[i]?.H;
+      if (lastGood && lastG && G && inv3(lastG)) { f.H = mul3(G, mul3(inv3(lastG), lastGood)); f.lost = false; f.assumed = true; }
+    }
+  };
+  /* a patch that has mostly left the picture is gone: whatever it still "finds" there is the background behind it */
+  const shown = (H) => { const q = quad.map((p) => apply(H, p)), xs = q.map((p) => p[0]), ys = q.map((p) => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), A = (x1 - x0) * (y1 - y0); if (!(A > 0) || !Number.isFinite(A)) return 0; return Math.max(0, Math.min(w, x1) - Math.max(0, x0)) * Math.max(0, Math.min(h, y1) - Math.max(0, y0)) / A; };
+  for (const order of [Array.from({ length: frames.length - k - 1 }, (_, j) => k + 1 + j), Array.from({ length: k }, (_, j) => k - 1 - j)]) {
+    let gone = false; for (const i of order) { const f = frames[i]; if (!gone && !f.lost && shown(f.H) < 0.35) gone = true; if (gone) { f.lost = true; f.assumed = false; f.left = true; } }
+  }
+  extend(Array.from({ length: frames.length - k }, (_, j) => k + j));
+  extend(Array.from({ length: k + 1 }, (_, j) => k - j));
   const lost = frames.filter((f) => f.lost).length / Math.max(1, frames.length), good = frames.filter((f) => Number.isFinite(f.err) && !f.assumed);
   const errs = good.map((f) => f.err).sort((a, b) => a - b), med = errs[errs.length >> 1] ?? Infinity;
   const quality = lost > 0.1 || med > 2.5 ? 'Poor' : med > 1.2 ? 'Fair' : 'Good';

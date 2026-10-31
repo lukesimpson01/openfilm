@@ -6,6 +6,7 @@ import { DEVICE_PRESETS, presetScene, addScene3d, DEFAULT_QUICK, START_FROM, FIN
 import { addCamera, CAMERA_PRESETS, CAMERA3D_PRESETS } from './camera';
 import { analyseFootage, findCachedAnalysis, readScanFrames, type AnalysisResult, type Quality, type ScanFrames, type Seen } from './analysis';
 import { suggestSpots } from './cling.js';
+import { printedOnSurface } from './printed-subjects.js';
 import { findSurface, type FoundSurface } from './surface-client';
 import { footageRect, clipFit, clamp, fitItem } from './track-space.js';
 import { addTracked, itemFor, EFFECT_MODES, type EffectMode } from './tracked';
@@ -212,6 +213,8 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     if(pick?.spatialAnchor&&items[0]){const solution=sceneTracks[result.spatial!],a=anchorFor(pick),pose=spatialPoseAt(solution,Math.round((pick.time??sceneTime)*1e6)),p=projectWorld(a.position,pose);if(!p)throw Error('This point is behind the source camera. Choose a visible source frame.');Object.assign(items[0],{place:a.type==='surface'?'surface':'standing',spatialAnchor:{...a,depthOffset:(.5-sceneDepth)*2},worldHeight:(items[0].size/result.h)*solution.height/pose.intrinsics[1][1]*p.depth,spatialWarning:undefined});}
     if(result.spatial&&items[0]&&!items[0].spatialAnchor){setAmbiguous(true);throw Error('This point has no verified surface. Choose a floating depth or another surface.');}
     const name = mode !== 'textBehind' ? EFFECT_MODES[mode] : template === 'walkThrough' ? 'Walk Through Text' : template === 'giant' ? 'Walk Past Giant Title' : template === 'surface' ? 'Tracked text on surface' : template === 'floating' ? 'Text Above Ground' : template === 'location' ? 'Location Title' : '3D Text in Scene';
+    /* a figure printed on the very surface the text goes on (a poster) must not cover it */
+    if (S && result.matte && items[0]) { try { const meta = await fetch(`${folder}${result.matte}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null); const box = meta && printedOnSurface(meta, S.result, S.quad); if (box) Object.assign(items[0], { printedBox: box }); } catch { /* no mask meta: nothing excluded */ } }
     const { op, layer } = await addTracked(projectId, film, f.clip.id, at, { name, analysis: S ? { ...result, scene: sceneForItem, planes: planesForItem } : result, mode, items, defaultDepth: foreground, extra: { pick } });
     await place(op, layer.id, `Add ${name}`, '3D');setPick(null);setAmbiguous(false);setPicking(true);
     notify(`${name} added. Click the video to place another.`);

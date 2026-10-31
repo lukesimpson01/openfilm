@@ -3935,7 +3935,8 @@ export const Timeline = React.memo(function Timeline({
         ) : null}
 
         {/* the middle: play and the timecode, centered in the room the tools leave; status beside them */}
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-3">
+        {/* never narrower than the play button and timecode: on a narrow window the tools beside it give way instead */}
+        <div className="flex min-w-max flex-1 items-center justify-center gap-3">
           {transport ? <div className="shrink-0">{transport}</div> : null}
           {dropBusy || drag.saving ? (
             <span className="text-[11px]" style={{ color: TL.faint }}>{t('timeline.applying')}</span>
@@ -3996,7 +3997,7 @@ export const Timeline = React.memo(function Timeline({
             onChange={(e) => zoomTo(sliderToZoom(Number(e.target.value), spanMs))}
             disabled={!(hasLanes && spanMs > 0)}
             aria-label={t('timeline.zoom')}
-            className="tl-zoom hidden h-[3px] w-[78px] shrink-0 cursor-pointer disabled:opacity-40 @lg:block"
+            className="tl-zoom hidden h-[3px] w-[78px] shrink-0 cursor-pointer disabled:opacity-40 @3xl:block"
             style={{ '--pos': zoomToSlider(zoom, spanMs) } as React.CSSProperties}
           />
         </Tooltip>

@@ -51,3 +51,16 @@ test('frames the patch loses continue with the camera motion instead of vanishin
   assert.ok(r.result.frames.slice(9).every((f) => !f.lost), 'no lost frames once continued');
   assert.ok(r.result.frames.slice(9).some((f) => f.assumed));
 });
+
+test('a patch lost while leaving the picture keeps leaving at its own speed, not the background’s', async () => {
+  const { trackPatch } = await import('../local-surface.js');
+  /* the patch slides right 10 px a frame and is lost (blank) once near the right edge; the camera track barely moves */
+  const W2 = 180, H2 = 320, n = 14, base = scene([0, 0, 1], 3).grays[0];
+  const shift = (g, dx) => { const o = new Uint8Array(g.length).fill(120); for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { const sx = x - dx; if (sx >= 0 && sx < W2) o[y * W2 + x] = g[y * W2 + sx]; } return o; };
+  const grays = Array.from({ length: n }, (_, i) => (i < 8 ? shift(base, 10 * i) : new Uint8Array(W2 * H2).fill(120))), times = grays.map((_, i) => i * 0.1);
+  const global = { frames: times.map((t, i) => ({ t, H: [1, 0, i * 0.5, 0, 1, 0, 0, 0, 1] })) };
+  const quad = [[60, 120], [120, 120], [120, 200], [60, 200]], r = trackPatch(grays, times, W2, H2, 0, quad, global);
+  const x = (i) => { const H = r.frames[i].H, c = [90, 160], z = H[6] * c[0] + H[7] * c[1] + H[8]; return (H[0] * c[0] + H[1] * c[1] + H[2]) / z; };
+  assert.ok(x(7) > 150, `patch near the edge at frame 7 (${x(7).toFixed(1)})`);
+  assert.ok(x(11) - x(8) > 20, `keeps moving out at its own speed (${(x(11) - x(8)).toFixed(1)} px over 3 frames)`);
+});

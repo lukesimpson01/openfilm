@@ -15,7 +15,7 @@ export type TrackItem = {
   letters?: boolean; opacity?: number; in?: number; out?: number;
   sceneDepth?: number; elevation?: number; spacing?: number;
   motion?:Record<string,any>;animations?:any[];videoAt?:number;videoFrom?:number;videoSpeed?:number;id?:string;video?:string;model?:string;spatialAnchor?:Record<string,any>;worldHeight?:number;spatialWarning?:string;
-  planeQuad?:[number,number][];sceneClip?:[number,number][];surfaceName?:string;autoSurface?:boolean;track?:string;
+  planeQuad?:[number,number][];sceneClip?:[number,number][];surfaceName?:string;autoSurface?:boolean;track?:string;printedBox?:[number,number,number,number];
   /** entrance / exit style (ANIM_NAMES) over `in` / `out` seconds; letters of a split word start `stagger` s apart */
   anim?: AnimName; animOut?: AnimName; stagger?: number;
   /** a designed card instead of plain text: 'location' (place name, `sub` and `sub2` lines under it) */

@@ -65,5 +65,11 @@ is not trusted: the text stands at that depth facing the camera, and the card sa
 Subject masks are upsampled edge-aware in `track-runtime.js` (each mask sample weighted by how close its footage colour
 is), widened by `edgeShift` −0.06 by default, and both passes blend "over" for alpha as well as colour.
 
+A patch that has mostly left the picture is treated as gone from then on (what it still "finds" there is the background
+behind it); frames after it continue with the patch's own last motion when it was leaving, so a poster walked past leaves
+the frame with the text on it. A detected "person" lying wholly inside the text's own surface without reaching its lower
+edge (a figure printed on a poster or shown on a screen) is drawn under the text, not over it (`uExclude` in the subject
+pass); people in front of a hung poster stand on the ground below it, so they still cover the text.
+
 Known limits: a click right on a wall/floor edge can pick the mirror orientation; the light (in-browser) masks are coarse
 for crowds, so text can show through a body or a halo where they miss; the native path takes minutes for a 12 s clip.
