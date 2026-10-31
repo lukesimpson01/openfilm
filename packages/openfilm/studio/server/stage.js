@@ -986,11 +986,12 @@
     for (const [name, value] of [['user-select', 'text'], ['-webkit-user-select', 'text'], ['cursor', 'text'], ['outline', 'none'], ['pointer-events', 'auto'], ['caret-color', BLUE]]) {
       host.style.setProperty(name, value, 'important');
     }
-    /* Shift+Enter breaks the line (where the words can hold one); Enter keeps them, Esc gives them up */
+    /* Shift+Enter breaks the line (where the words can hold one); Enter, Esc or clicking away keep them (as in most
+       editors: what was typed is not thrown away by leaving; Undo takes it back) */
     const lines = !overlay;
     const onKey = (e) => {
       e.stopPropagation();
-      if (e.key === 'Escape') { e.preventDefault(); finishText(false); }
+      if (e.key === 'Escape') { e.preventDefault(); finishText(true); }
       else if (e.key === 'Enter' && !(lines && e.shiftKey)) { e.preventDefault(); finishText(true); }
     };
     const onBlur = () => finishText(true);

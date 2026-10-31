@@ -278,8 +278,11 @@ export function MediaPool({
     /* every file, of any kind: a document or a model is material too (the agent can make a film of it); Studio
        plays and previews only pictures, videos, sounds and pages */
     const files = media.files.filter((f) => !hiddenDir(relDir(assetRel(f.path))));
-    return [...media.pages, ...files];
-  }, [media, assetRel]);
+    /* the editor's own layer pages (frame/: titles, effects, cameras) are the timeline's insides, not media to place:
+       out of the way unless searched for */
+    const pages = query.trim() ? media.pages : media.pages.filter((p) => !p.path.startsWith('frame/'));
+    return [...pages, ...files];
+  }, [media, assetRel, query]);
 
   /* every folder under assets/ but a tool's (fonts) */
   const folders = React.useMemo(() => (media ? media.dirs.filter((dir) => !hiddenDir(dir)) : []), [media]);
@@ -1017,6 +1020,7 @@ export function MediaPool({
                 onMenu={(e) => menuFor(item, e)}
                 onRename={(name) => void rename(item.file.path, name, false)}
                 onCancelRename={() => setRenaming(null)}
+                {...(onAdd && canAdd(item.file) ? { onAdd: () => onAdd(item.file) } : {})}
               />
             ))}
             {flat ? null : uploads.filter((u) => u.into === at).map((u) => <UploadTile key={u.id} upload={u} row={rows} />)}
@@ -1254,6 +1258,8 @@ function FileTile(p: {
   library?: boolean;
   /** A bundle of Saved that offers properties: the word that marks it a component. */
   componentMark?: string;
+  /** Put it on the timeline in one click (the same as Enter on it, or dragging it there). */
+  onAdd?: () => void;
 }) {
   const bundle = p.file.bundle;
   return (
@@ -1320,6 +1326,11 @@ function FileTile(p: {
             <span className="absolute right-1 top-1 z-10 rounded bg-black/65 px-1 text-[9.5px] font-semibold uppercase leading-[15px] tracking-wide text-white/90" title={p.proxyLabel}>{p.proxyMark}</span>
           ) : p.file.proxy && p.file.proxy.state !== 'failed' ? (
             <span className="absolute inset-x-0 bottom-0 z-10 h-1" title={p.proxyLabel}><UploadBar ratio={p.file.proxy.state === 'making' ? p.file.proxy.ratio ?? 0 : -1} /></span>
+          ) : null}
+          {p.onAdd && !p.renaming ? (
+            <button type="button" aria-label={`Add ${p.file.name} to the timeline`} title="Add to the timeline"
+              onClick={(e) => { e.stopPropagation(); p.onAdd!(); }} onPointerDown={(e) => e.stopPropagation()} draggable={false}
+              className="absolute bottom-1 left-1 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--accent)] text-white opacity-0 shadow-[0_1px_4px_rgba(0,0,0,.25)] transition duration-150 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"><Plus size={13} strokeWidth={2.5} /></button>
           ) : null}
           {/* a bundle of Saved: a component, and how many clips a group holds */}
           {p.componentMark ? (

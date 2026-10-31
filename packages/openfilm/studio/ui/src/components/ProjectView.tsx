@@ -3141,7 +3141,7 @@ export function ProjectView({ projectId, onProject, onLeave }: {
                       onClose={closeInspector}
                     />
                   ) : selectedBlocks.length === 1 && isFrameSrc(selectedBlocks[0].src) ? (
-                    <FrameInspector projectId={projectId} folder={folder} src={selectedBlocks[0].src!} clipId={selectedBlocks[0].clipId} startMs={selectedBlocks[0].startMs} endMs={selectedBlocks[0].endMs} edit={(ops, label) => film.edit(ops, label)} film={film.film} notify={toast.show} timeMs={timeMs} width={inspectorShownWidth} onClose={closeInspector} />
+                    <FrameInspector projectId={projectId} folder={folder} src={selectedBlocks[0].src!} clipId={selectedBlocks[0].clipId} startMs={selectedBlocks[0].startMs} endMs={selectedBlocks[0].endMs} edit={(ops, label) => film.edit(ops, label)} record={film.record} film={film.film} notify={toast.show} timeMs={timeMs} width={inspectorShownWidth} onClose={closeInspector} />
                   ) : (
                     <FontScopeContext.Provider value={fontScope}>
                     <LiveGeometryInspector

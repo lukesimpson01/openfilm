@@ -28,6 +28,8 @@ export function SimpleExport(p: ExportCenterProps) {
   const [codec, setCodec] = React.useState<ExportVideoCodec>('h264'), [captions, setCaptions] = React.useState(true);
   const [job, setJob] = React.useState<ExportJob | null>(null), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
   const [now, setNow] = React.useState(() => Date.now());
+  /* the film's own picture on its card; the film icon when it has none yet */
+  const [poster, setPoster] = React.useState(true);
   const dialog = React.useRef<HTMLDivElement>(null), previousFocus = React.useRef<HTMLElement | null>(null);
   const projectFps = Math.round(p.projectFps || 30);
   React.useEffect(() => {
@@ -80,7 +82,8 @@ export function SimpleExport(p: ExportCenterProps) {
         {/* what is being exported: the film's shape, name, length and size */}
         <div className="mb-5 flex items-center gap-4">
           <div className="relative flex h-[76px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[linear-gradient(145deg,#1c2433,#0d1118)] text-white/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,.06)]" style={{ width: Math.round(Math.min(136, Math.max(44, 76 * aspect))) }}>
-            {preset === 'audio' ? <Music2 size={22} /> : <Film size={22} />}
+            {preset === 'audio' || !poster ? (preset === 'audio' ? <Music2 size={22} /> : <Film size={22} />)
+              : <img src={`/api/projects/${encodeURIComponent(p.projectId)}/poster`} alt="" onError={() => setPoster(false)} className="absolute inset-0 h-full w-full object-cover" />}
             <span className="absolute bottom-1 right-1.5 rounded bg-black/45 px-1 text-[9.5px] font-medium tabular-nums">{clock(p.durationMs)}</span>
           </div>
           <div className="min-w-0">

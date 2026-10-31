@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Diamond, ChevronLeft, ChevronRight, ChevronDown, Timer, X, Captions, Move } from 'lucide-react';
 import type { Film, Op } from '@/api';
+import type { OutsideStep } from '@/editor/use-film';
 import { ZoomInspector } from './ZoomInspector';
 import { MotionGraphicInspector } from './MotionGraphicInspector';
 import { Scene3DInspector } from './Scene3DInspector';
@@ -23,6 +24,8 @@ export interface FrameInspectorProps {
   projectId: string; folder: string; src: string; clipId?: string; startMs: number; endMs: number; timeMs: number; width: number; onClose: () => void;
   film?: Film | null; notify?: (m: string) => void;
   edit: (ops: Op[], label: string) => Promise<string | null>;
+  /** an edit of the layer's own page, put on the undo list (undo writes the page back as it was before) */
+  record?: (label: string, step: OutsideStep) => void;
 }
 
 const GROUPS: { title: string; keys: (l: FrameLayer) => string[]; open?: boolean }[] = [
@@ -36,17 +39,25 @@ const MOTIONS = ['none', 'wiggle', 'shake', 'oscillate'];
 const seek = (seconds: number) => window.dispatchEvent(new CustomEvent('frame-seek', { detail: seconds }));
 const numberBox = 'h-7 min-w-0 rounded-md border border-transparent bg-[var(--fill-tsp)] px-2 text-[11.5px] tabular-nums text-[var(--text)] outline-none transition hover:border-[var(--border)] focus:border-[var(--accent)] focus:bg-[var(--bg)]';
 
-export function FrameInspector({ projectId, folder, src, clipId, startMs, endMs, timeMs, width, onClose, edit, film = null, notify }: FrameInspectorProps) {
+export function FrameInspector({ projectId, folder, src, clipId, startMs, endMs, timeMs, width, onClose, edit, record, film = null, notify }: FrameInspectorProps) {
   const id = layerIdOf(src);
   const [page, setPage] = React.useState<FrameLayer | null>(null);
   const [sel, setSel] = React.useState(0);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = React.useRef<FrameLayer | null>(null);
+  /* the page as a burst of edits found it: one drag or a run of typing is one step to undo */
+  const before = React.useRef<FrameLayer | null>(null);
 
   const flush = React.useCallback(() => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    if (latest.current) { const l = latest.current; latest.current = null; void writeLayer(projectId, l, true); }
-  }, [projectId]);
+    if (!latest.current) return;
+    const after = latest.current, was = before.current; latest.current = null; before.current = null;
+    void writeLayer(projectId, after, true);
+    if (record && was) {
+      const put = (l: FrameLayer) => async () => { await writeLayer(projectId, l); livePreview(l); return null; };
+      record(`Edit ${after.name || after.kind || 'layer'}`, { undo: put(was), redo: put(after) });
+    }
+  }, [projectId, record]);
   React.useEffect(() => {
     let live = true;
     setPage(null); setSel(0);
@@ -65,6 +76,7 @@ export function FrameInspector({ projectId, folder, src, clipId, startMs, endMs,
       ? { ...input, keyframes: Object.fromEntries(Object.entries(input.keyframes ?? {}).map(([k, fr]) => [k, fr.map((f) => (f.ease ? f : { ...f, ease: 'Ease in-out' }))])) }
       : input;
     const next = page.layers ? { ...page, layers: page.layers.map((l: FrameLayer, i: number) => (i === Math.min(sel, page.layers.length - 1) ? changed : l)) } : changed;
+    if (!before.current) before.current = page;
     setPage(next); latest.current = next; livePreview(next);
     if (clipId && !page.layers && next.duration > page.duration + .001){
       const last=next.kind==='scene3d'?film?.tracks.flatMap(tr=>tr.clips).filter(c=>c.src.split('#')[0]===src.split('#')[0]).sort((a,b)=>(b.time?.[1]??0)-(a.time?.[1]??0))[0]:undefined;
@@ -86,7 +98,7 @@ export function FrameInspector({ projectId, folder, src, clipId, startMs, endMs,
   const appendAction = async (next:FrameLayer,from:number,label:string) => {
     if(!page||!film||!clipId)return;
     const {ops,at}=deviceActionClips(film,clipId,from,next.duration,label);
-    if(timer.current){clearTimeout(timer.current);timer.current=null;}latest.current=null;
+    if(timer.current){clearTimeout(timer.current);timer.current=null;}latest.current=null;before.current=null;
     await writeLayer(projectId,next,true);
     const error=await edit(ops,`Add ${label}`);
     if(error){await writeLayer(projectId,page,true);throw new Error(error);}

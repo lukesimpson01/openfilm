@@ -73,3 +73,22 @@ pass); people in front of a hung poster stand on the ground below it, so they st
 
 Known limits: a click right on a wall/floor edge can pick the mirror orientation; the light (in-browser) masks are coarse
 for crowds, so text can show through a body or a halo where they miss; the native path takes minutes for a 12 s clip.
+
+Precise people masks for one spot: once text is placed, `crossingPeople` (`printed-subjects.js`) looks for people the
+light masks see crossing the text's surface (printed figures excluded) and, when there are any, the Track tab offers
+"Make their edges precise". That runs SAM 2.1 tiny on just those people over just those seconds (8 fps, no camera solve),
+saves the union mask beside the scan result and the subject pass uses it in place of the light mask. Measured on the same
+laptop: about 11 minutes for 4.2 s with two people, so the card states its estimate and the job can be cancelled.
+
+## Editor basics
+
+- Media: analysis folders (`spatial`, `track`, `mattes`, `scene`, `tracking2d`) under `assets/` are left out of the media
+  list (`listFiles`), and layer pages (`frame/…`) show only when searched. Every tile has a "+" that adds it to the
+  timeline, for those who do not drag.
+- Text: a double click on a title on the stage edits its words in place; Escape keeps what was typed. A double click on a
+  layer title (no editable words on the stage) focuses the inspector's Text field.
+- Undo: inspector edits of a layer's page (text, transform, effects, keyframes) are undo steps (`record` in `use-film.ts`):
+  one step per burst of edits, undo writes the page back as it was before it.
+- Music: a song added from the Music tab ends where the last picture ends (sound effects keep their own length).
+  Kevin MacLeod tracks are bundled under CC BY 4.0; commercial releases are never bundled, each plays only from a copy in
+  the local recording library (`shorts-library/recordings`, git-ignored).

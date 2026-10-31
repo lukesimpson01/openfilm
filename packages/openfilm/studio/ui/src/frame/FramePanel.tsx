@@ -6,7 +6,7 @@ import { ANIMATION_PRESETS, PRESET_CATEGORIES } from './lib/animationPresets.js'
 import { searchSfx, SFX_COUNT, SFX_CATALOG } from './lib/sfxLibrary.js';
 import { recordingIssue, soundRecordingSource } from '../../../../src/recording-identity.mjs';
 import { MUSIC_SECTIONS, searchMusic } from './lib/musicLibrary.js';
-import { placeClip } from './lines';
+import { placeClip, spans } from './lines';
 import { framePath, round, makeLayer, readLayer, writeLayer, withPreset, isFrameSrc, layerIdOf, ensureRuntime, type FrameLayer } from './layers';
 import { durationOf, importSound, onPreview, playPreview, previewing, stopPreview, type Sound } from './audio';
 import { SubtitlesPanel } from './SubtitlesPanel';
@@ -27,6 +27,8 @@ export interface FramePanelProps {
   onNameLine?: (clipId: string, label: string) => void;
 }
 
+/** where the last picture (not a sound) on the timeline ends, in seconds */
+const pictureEnd = (film: Film | null) => Math.max(0, ...(film?.tracks ?? []).flatMap((t) => spans(t.clips).filter((_, i) => !/\.(mp3|wav|m4a|aac|ogg|flac|opus)(?:[#?]|$)/i.test(t.clips[i].src)).map((x) => x.end ?? 0)));
 export function FramePanel(p: FramePanelProps) {
   const at = p.timeMs / 1000;
   const [busy, setBusy] = React.useState(false);
@@ -50,7 +52,9 @@ export function FramePanel(p: FramePanelProps) {
   React.useEffect(() => { if (p.selected?.clipId && isFootage(p.selected.src)) setLastFootage(p.selected.clipId); }, [p.selected?.clipId, p.selected?.src]);
   const addSound = (s: Sound) => run(async () => {
     const path = await importSound(p.projectId, s);
-    const len = Math.max(0.1, durationOf(s)), id = `snd-${Date.now().toString(36)}`;
+    /* music fits the picture: a song longer than the rest of the film ends with it, not minutes after the last shot */
+    const full = Math.max(0.1, durationOf(s)), left = pictureEnd(p.film) - at;
+    const len = p.tab === 'music' && left > 1 ? Math.min(full, left) : full, id = `snd-${Date.now().toString(36)}`;
     const placed = placeClip(p.film, { src: path, id, time: [0, round(len)] }, at, len, 'audio');
     const fail = await p.edit([placed.op], `Add ${s.name}`);
     if (fail) throw new Error(fail);

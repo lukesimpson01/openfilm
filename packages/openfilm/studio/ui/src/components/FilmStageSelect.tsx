@@ -2037,7 +2037,14 @@ function FilmStageSelectImpl({
       }
       if (!inside || !held?.element?.text) {
         const layer = await ask<StageLayer>('hit', { ...at, from: held?.layer?.handle ?? null, detail: true });
-        if (token !== pressSeq.current || !layer?.text) return;
+        if (token !== pressSeq.current) return;
+        if (!layer?.text) {
+          /* a title made in the editor is a layer page drawn from its fields: a double-click on it goes straight to its
+             words in the inspector, selected, so typing replaces them */
+          const field = document.querySelector<HTMLTextAreaElement | HTMLInputElement>('[data-frame-inspector] textarea[aria-label="Text"], [data-frame-inspector] input[aria-label="Text"]');
+          if (inside && field) { field.focus(); field.select(); }
+          return;
+        }
         commitHit(hitOf(layer));
       }
       startTextEditRef.current();
