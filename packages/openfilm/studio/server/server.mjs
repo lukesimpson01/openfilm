@@ -23,7 +23,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { recordingIssue } from '../../src/recording-identity.mjs';
 import { EditError, editProjectFilm, pageClipLook, readProjectFilm } from './film.mjs';
-import { FileError, bringIn, collect, extractAudio, freezeFrame, importFile, inside, writeFrameFile, listFiles, makeFolder, moveCheck, moveFile, readable, relink, trashFile } from './files.mjs';
+import { FileError, bringIn, collect, extractAudio, freezeFrame, importFile, inProject, inside, writeFrameFile, listFiles, makeFolder, moveCheck, moveFile, readable, relink, trashFile } from './files.mjs';
 import { ExportError, createExports, draftApps, exportCapabilities, exportsRoot, projectSizes } from './exports.mjs';
 import { MediaError, frame, loudness, poster, probe, waveform } from './derived.mjs';
 import { HistoryError, checkout, commitChanges, deleteBranch, discardChanges, historyFiles, log, mergeBranch, renameBranch, restoreCommit, status as historyStatus } from './history.mjs';
@@ -57,7 +57,7 @@ import { captionRoutes } from './captions.mjs';
 import { projectSettingsRoute } from './project-settings.mjs';
 import { markersRoute } from './markers.mjs';
 import { transitionPageRoutes } from './transition-pages.mjs';
-import { createAsks, getRoute, subtitleTranscriber, subtitleTranslator } from './get.mjs';
+import { clipperWords, createAsks, getRoute, subtitleTranscriber, subtitleTranslator } from './get.mjs';
 import { LOCATION_KEYS, chooseFolder, locations, usableFolder } from '../../src/locations.mjs';
 import { doctor } from '../../src/doctor.mjs';
 import { recentProblems } from '../../src/problems.mjs';
@@ -578,6 +578,18 @@ export async function startStudio({ port = 4747, key, openBrowser = systemBrowse
       throw new HttpError(410, 'This project’s folder is not there any more: it was moved, renamed or deleted.', { code: 'missing' });
     }
     /* ── subtitles: the film's lines, the person's subtitle style, translation (see captions.mjs) ── */
+    /* the words a clip says, by Clyra's clipper speech-to-text: { src, from, to } (seconds of the file) → { words } */
+    if (rest === 'subtitles/words' && req.method === 'POST') {
+      const { src, from, to } = /** @type {{ src?: unknown, from?: unknown, to?: unknown }} */ (await readJson(req));
+      const file = typeof src === 'string' ? inProject(project.path, src) : null;
+      if (!file) throw new HttpError(400, 'which file? { src } inside the project');
+      const start = Math.max(0, Number(from) || 0), end = Number(to);
+      const controller = new AbortController();
+      res.once('close', () => { if (!res.writableEnded) controller.abort(); });
+      const words = await clipperWords(file, { start, duration: Number.isFinite(end) && end > start ? end - start : 0 }, controller.signal)
+        .catch((e) => { throw new HttpError(502, `speech-to-text failed: ${e?.message ?? e}`); });
+      return json(res, 200, { words });
+    }
     if (await captionRoutes(req, res, project.path, rest, { translate: subtitleTranslator, transcribe: await subtitleTranscriber() })) return;
     /* ── end subtitles ── */
     /* the editor's settings of the project: its frame rate, its tracks' names (see project-settings.mjs) */

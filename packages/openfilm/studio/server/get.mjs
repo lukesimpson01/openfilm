@@ -23,12 +23,13 @@
  * own agents say so with OPENFILM_GET_WEB=1 (the CLI asks for them); an agent like Claude Code or Codex searches with
  * its own. Either can run them.
  */
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { FILM_FILE, clipKind } from '../../src/film-doc.mjs';
 import { spokenLines } from './captions.mjs';
 import { dropTranscripts, readTranscript, transcriptIsCurrent, transcriptPath, writeTranscript } from './transcripts.mjs';
@@ -575,8 +576,48 @@ export async function subtitleTranslator(root) {
  * it. The person asked for it in Studio, so it asks nothing more. Throws `code: 'not-connected'` when nothing can.
  * @returns {Promise<import('./captions.mjs').Transcribe>}
  */
+/* Clyra's AI clipper (the repo root's clipper-pipeline.py): its speech-to-text (Fish Audio, else local Whisper) times
+   the words of the editor's subtitles too, so a clip captioned in either place says the same words. */
+const CLIPPER = process.env.CLYRA_CLIPPER_PIPELINE || fileURLToPath(new URL('../../../../../../../clipper-pipeline.py', import.meta.url));
+
+/** Timed words (seconds of the file) for `file`, or the part of it from `start` for `duration`, by the clipper. */
+export function clipperWords(file, { start = 0, duration = 0 } = {}, signal) {
+  return new Promise((done, fail) => {
+    const child = spawn('python3', [CLIPPER, '--transcribe', JSON.stringify({ source: file, start, duration })], { cwd: dirname(CLIPPER), stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '', err = '', words = null, error = '';
+    const stop = () => child.kill('SIGTERM');
+    signal?.addEventListener('abort', stop, { once: true });
+    child.stdout.on('data', (chunk) => {
+      out += chunk;
+      const lines = out.split('\n'); out = lines.pop() ?? '';
+      for (const line of lines) {
+        try { const e = JSON.parse(line); if (e.type === 'transcript') words = e.words; if (e.type === 'error') error = String(e.message ?? ''); } catch { /* a log line */ }
+      }
+    });
+    child.stderr.on('data', (chunk) => { err = `${err}${chunk}`.slice(-2000); });
+    child.on('error', fail);
+    child.on('close', (code) => {
+      signal?.removeEventListener('abort', stop);
+      if (signal?.aborted) return fail(new Error('cancelled'));
+      if (code !== 0 || !Array.isArray(words)) return fail(new Error(error || err.trim().split('\n').at(-1) || `transcription failed (${code})`));
+      done(words.filter((w) => w?.word && Number.isFinite(w.start)).map((w) => ({ word: String(w.word), start: Number(w.start), end: Math.max(Number(w.start) + 0.04, Number(w.end) || 0) })));
+    });
+  });
+}
+
+/** `src`'s words by the clipper, kept as its transcript (one cue a word: readTranscript makes them lines). */
+export async function transcribeWithClipper(root, src, signal) {
+  const words = await clipperWords(inside(root, src), {}, signal);
+  await writeTranscript(root, src, { lines: words.map((w) => ({ text: w.word, startMs: Math.round(w.start * 1000), endMs: Math.round(w.end * 1000) })) });
+}
+
 export async function subtitleTranscriber() {
   return async (root, src, signal) => {
+    /* the clipper's speech-to-text first, where Clyra is beside this editor; a connected provider otherwise */
+    if (existsSync(CLIPPER)) {
+      try { await transcribeWithClipper(root, src, signal); return; }
+      catch (e) { if (signal?.aborted) throw e; if (!(await chooseProvider('asr', { settings: await providerSettings() }).catch(() => null))) throw e; }
+    }
     if (!(await chooseProvider('asr', { settings: await providerSettings() }).catch(() => null))) {
       throw Object.assign(new Error(notConnected(['asr'])), { code: 'not-connected' });
     }

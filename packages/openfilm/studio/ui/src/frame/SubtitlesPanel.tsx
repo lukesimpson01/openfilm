@@ -4,12 +4,14 @@ import type { Film, Op } from '@/api';
 import { WORD_PRESETS, LINE_STYLES } from './subtitle-styles.js';
 import { SubtitleSettings, DEFAULT_SUBTITLE_STYLE, cuesLength, newCue, type Cue, type SubtitleStyle } from './SubtitleFields';
 import { makeLayer, readLayer, writeLayer, livePreview, round, type FrameLayer } from './layers';
+import { spans } from './lines';
 import { T, seg, segWrap } from './ui';
 
 /* Subtitles, as the Shorts home tools and Crayo do them: first a choice of AI or manual subtitles, then the cue list
    (Edit) and the look (Style). All the cues live in one subtitle clip that starts at 0, so a cue's times are film
    times. */
 export const SUB_PREFIX = 'layer-sub';
+const clock = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${(s % 60).toFixed(2).padStart(5, '0')}`;
 const seek = (s: number) => window.dispatchEvent(new CustomEvent('frame-seek', { detail: s }));
 
@@ -66,6 +68,48 @@ export function SubtitlesPanel({ projectId, folder, film, timeMs, edit, notify, 
   const cues = ((layer?.cues ?? []) as Cue[]).slice().sort((a, b) => a.start - b.start);
   const at = Math.max(0, timeMs / 1000);
 
+  /* AI subtitles: the clips that can speak, and the chosen one's words by Clyra's clipper speech-to-text */
+  const speaking = React.useMemo(() => {
+    const out: { clip: Film['tracks'][number]['clips'][number]; start: number; end: number | null }[] = [];
+    for (const tr of film?.tracks ?? []) { const sp = spans(tr.clips); tr.clips.forEach((c, i) => { if (/\.(mp4|mov|m4v|webm|mkv|mp3|wav|m4a|aac|ogg|flac)(?:[#?]|$)/i.test(c.src ?? '')) out.push({ clip: c, start: sp[i].start, end: sp[i].end ?? null }); }); }
+    return out;
+  }, [film]);
+  const [aiClip, setAiClip] = React.useState<string | null>(null);
+  const [aiMode, setAiMode] = React.useState<'Word' | 'Lines'>('Lines');
+  const [aiBusy, setAiBusy] = React.useState('');
+  const makeAi = async (x: (typeof speaking)[number]) => {
+    const name = x.clip.src.split('#')[0].split('/').pop();
+    setAiBusy(`Listening to ${name}…`);
+    try {
+      const inP = x.clip.time?.[0] ?? 0, speed = x.clip.speed || 1, outP = x.end != null ? inP + (x.end - x.start) * speed : undefined;
+      const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/subtitles/words`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ src: x.clip.src.split('#')[0], from: inP, to: outP }) });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || `speech-to-text failed (${r.status})`);
+      /* film time; lines of up to four words, broken on a pause or a sentence's end */
+      const words = (body.words as { word: string; start: number; end: number }[]).map((w) => ({ word: w.word, start: x.start + (w.start - inP) / speed, end: x.start + (w.end - inP) / speed }))
+        .filter((w) => w.start >= x.start - 0.05 && (x.end == null || w.start < x.end));
+      if (!words.length) { notify(`No speech was heard in ${name}.`); return; }
+      const groups: (typeof words)[] = [];
+      for (const w of words) { const g = groups.at(-1); if (!g || g.length >= 4 || w.start - g.at(-1)!.end > 0.45 || /[.!?]$/.test(g.at(-1)!.word)) groups.push([w]); else g.push(w); }
+      const offset = clip ? spans([clip])[0].start : 0;
+      const made: Cue[] = groups.map((g) => { const t0 = g[0].start, t1 = g.at(-1)!.end; return { ...newCue(round(t0 - offset), g.map((w) => w.word).join(' '), round(Math.max(0.3, t1 - t0))), wordTimes: g.map((w) => ({ start: round(w.start - t0), end: round(w.end - t0) })) }; });
+      if (layer && clip) {
+        const kept = (layer.cues as Cue[]).filter((c) => c.start + offset + c.duration <= x.start || (x.end != null && c.start + offset >= x.end));
+        commit({ ...layer, mode: aiMode, cues: [...kept, ...made].sort((a, b) => a.start - b.start) });
+      } else {
+        const fresh = makeLayer('shape', { id: `${SUB_PREFIX}-${Date.now().toString(36)}`, kind: 'subtitle', name: 'Subtitles', ...DEFAULT_SUBTITLE_STYLE, mode: aiMode, styleId: aiMode === 'Lines' ? 37 : 2, cues: made, duration: cuesLength(made) } as never);
+        await writeLayer(projectId, fresh);
+        const fail = await edit([{ op: 'insert', clip: { src: `frame/${fresh.id}.html`, id: fresh.id, time: [0, round(cuesLength(made))] }, at: 0, newTrack: 0 } as Op], 'Add AI subtitles');
+        if (fail) { notify(fail); return; }
+        onNameLine?.(fresh.id, 'Subtitles');
+        setLayer(fresh);
+      }
+      notify(`${made.length} subtitle${made.length === 1 ? '' : 's'} from ${name}.`);
+      go('manual');
+    } catch (e) { notify(e instanceof Error ? e.message : String(e)); }
+    finally { setAiBusy(''); }
+  };
+
   /* a line just added takes the keys at once, its placeholder selected: typing replaces it (and reaches no shortcut) */
   const [fresh, setFresh] = React.useState<string | null>(null);
   const addCue = async () => {
@@ -94,14 +138,26 @@ export function SubtitlesPanel({ projectId, folder, film, timeMs, edit, notify, 
     );
   }
   if (view === 'ai') {
+    const chosen = speaking.find((x) => x.clip.id === aiClip) ?? speaking.find((x) => at >= x.start && (x.end == null || at < x.end)) ?? speaking[0];
     return (
       <div className="flex flex-col gap-3 p-2">
         <Header title="AI subtitles" onBack={() => go('choose')} />
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-[12px] leading-relaxed text-[var(--text-dim)]">
-          Recognizing speech needs a transcription service. None is connected in this editor, so nothing is sent anywhere.
-          Type or paste your lines in manual subtitles instead; the styles and animations are the same.
-        </div>
-        <button type="button" className={T.primary} onClick={() => go('manual')}>Use manual subtitles</button>
+        {speaking.length ? <>
+          <p className="px-1 text-[11.5px] leading-relaxed text-[var(--text-dim)]">Pick the clip to caption. Its speech is turned into timed words with the same speech-to-text as the AI clipper.</p>
+          <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Clip to caption">{speaking.map((x) => { const on = chosen?.clip.id === x.clip.id; return (
+            <button key={x.clip.id} type="button" role="radio" aria-checked={on} disabled={!!aiBusy} onClick={() => setAiClip(x.clip.id)}
+              className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${on ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}>
+              <Captions size={15} className={on ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'} />
+              <span className="min-w-0 flex-1"><span className="block truncate text-[12.5px] font-medium text-[var(--text)]">{x.clip.src.split('#')[0].split('/').pop()}</span>
+                <span className="block text-[11px] tabular-nums text-[var(--text-muted)]">{clock(x.start)}{x.end != null ? ` – ${clock(x.end)}` : ''}</span></span>
+            </button>); })}</div>
+          <div className={segWrap} role="group" aria-label="How the words show">{(['Lines', 'Word'] as const).map((m) => <button key={m} type="button" aria-pressed={aiMode === m} className={seg(aiMode === m)} onClick={() => setAiMode(m)}>{m === 'Lines' ? '3–4 words' : 'One word'}</button>)}</div>
+          <button type="button" className={T.primary} disabled={!!aiBusy || !chosen} onClick={() => chosen && void makeAi(chosen)}><Sparkles size={13} />{aiBusy ? 'Listening…' : 'Make subtitles'}</button>
+          {aiBusy && <p className="px-1 text-[11.5px] text-[var(--text-dim)]" role="status">{aiBusy}</p>}
+        </> : <>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-[12px] leading-relaxed text-[var(--text-dim)]">Add a video or a sound with speech to the timeline, then caption it here.</div>
+          <button type="button" className={T.secondary} onClick={() => go('manual')}>Use manual subtitles</button>
+        </>}
       </div>
     );
   }
