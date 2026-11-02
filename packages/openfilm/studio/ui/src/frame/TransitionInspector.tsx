@@ -1,4 +1,5 @@
 import React from 'react';
+import { RippleControls } from './RippleControls';
 
 import { Play, Copy, Trash2, Diamond } from 'lucide-react';
 import type { Film, Op } from '@/api';
@@ -49,6 +50,7 @@ export function TransitionInspector({ layer, clipId, film, folder, projectId, co
   const has = (p: string) => def.params.includes(p);
   const shutter = has('amount') && has('line');
   const pierce = has('pierce');
+  const ripple = def.id === 'classic.ripple';
   const vertical = def.id === 'classic.portrait_close';
   /* linked: the opening mirrors the closing (half the time each, after the hold); unlinked: the closing share is free */
   const linked = params.linked !== false;
@@ -149,7 +151,8 @@ export function TransitionInspector({ layer, clipId, film, folder, projectId, co
           <div className={`${segWrap} flex-1`}>{def.directions.map((d) => <button key={d} type="button" className={seg(params.direction === d)} onClick={() => set({ direction: d })}>{d[0].toUpperCase() + d.slice(1)}</button>)}</div>
         </div>
       ) : null}
-      {has('intensity') && !pierce ? <Slide label="Intensity" value={params.intensity} onChange={(v) => set({ intensity: v })} /> : null}
+      {ripple ? <RippleControls params={params} saved={layer.params ?? {}} set={set} /> : null}
+      {has('intensity') && !pierce && !ripple ? <Slide label="Intensity" value={params.intensity} onChange={(v) => set({ intensity: v })} /> : null}
       {has('motionBlur') && !pierce ? <Slide label="Motion blur" value={params.motionBlur} onChange={(v) => set({ motionBlur: v })} /> : null}
       {has('feather') ? <Slide label="Feather" value={params.feather} max={0.2} step={0.005} onChange={(v) => set({ feather: v })} /> : null}
       {has('hold') ? <Slide label="Hold" value={params.hold} max={0.4} step={0.01} onChange={(v) => set({ hold: v })} /> : null}

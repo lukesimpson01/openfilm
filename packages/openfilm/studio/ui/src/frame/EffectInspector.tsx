@@ -5,6 +5,7 @@ import { EFFECTS } from './transitions-catalog.js';
 import { SpeedGraph, type Curve } from './SpeedGraph';
 import { StageOverlay } from './StageOverlay';
 import { T, seg, segWrap } from './ui';
+import { RippleControls } from './RippleControls';
 
 /* A one-clip Creator effect's settings (Velocity Edit, Beat Shake, Flash Impact, Glitch Snap, Light Leak, Camera Roll,
    Split-Frame Freeze): its own controls only, the beat point as a time, a point picked on the picture, and — for the
@@ -26,8 +27,9 @@ export function EffectInspector({ layer, commit }: { layer: FrameLayer; commit: 
     <div className="flex flex-col gap-2.5 pt-2">
       <p className="text-[12px] leading-relaxed text-[var(--text-muted)]">{def.about}</p>
       {has('split') ? <Slide label="Beat at" value={p.split ?? 0.2} max={0.95} onChange={(v) => set({ split: v })} fmt={(v) => `${round(v * L)}s`} /> : null}
-      {has('intensity') ? <Slide label={layer.effect === 'fx.velocity' ? 'Speed swing' : 'Intensity'} value={p.intensity ?? 0.7} max={layer.effect === 'fx.velocity' ? 0.95 : 1} onChange={(v) => set({ intensity: v })} /> : null}
-      {has('glow') ? <Slide label="Colour split" value={p.glow ?? 0.3} onChange={(v) => set({ glow: v })} /> : null}
+      {layer.effect === 'fx.ripple' ? <RippleControls params={p} saved={layer.params ?? {}} set={set} /> : null}
+      {has('intensity') && layer.effect !== 'fx.ripple' ? <Slide label={layer.effect === 'fx.velocity' ? 'Speed swing' : 'Intensity'} value={p.intensity ?? 0.7} max={layer.effect === 'fx.velocity' ? 0.95 : 1} onChange={(v) => set({ intensity: v })} /> : null}
+      {has('glow') && layer.effect !== 'fx.ripple' ? <Slide label="Colour split" value={p.glow ?? 0.3} onChange={(v) => set({ glow: v })} /> : null}
       {has('angle') ? <Slide label="Turn" value={p.angle ?? 12} min={0} max={90} step={1} onChange={(v) => set({ angle: v })} fmt={(v) => `${v}°`} /> : null}
       {has('zoomIn') ? <Slide label="Turn in" value={p.zoomIn ?? 0.4} onChange={(v) => set({ zoomIn: v })} fmt={(v) => `${round(v * L)}s`} /> : null}
       {has('zoomOut') ? <Slide label="Turn back" value={p.zoomOut ?? 0.4} onChange={(v) => set({ zoomOut: v })} fmt={(v) => (v < 0.01 ? 'stays' : `${round(v * L)}s`)} /> : null}

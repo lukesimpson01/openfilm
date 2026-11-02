@@ -19,6 +19,9 @@ uniform int uEffect, uEase, uDir, uStrips, uTaps;
 uniform float uP, uIntensity, uMotionBlur, uFeather, uHold, uAngle, uGrain, uSeed, uAspect, uAspA, uAspB, uDp;
 uniform float uAmount, uBalance, uSplit, uMatch, uShadow, uGlow, uScale, uIn, uOut;
 uniform vec3 uColor, uColor2; uniform vec2 uCenter, uRes; uniform bool uLinear, uMotion;
+/* the ripple: uRip (style, waves, thickness, refraction), uRip2 (build-up, dissipation, reach, impact), uRip3 (geometry,
+   interference, crest softness, highlight); uRipM takes a source point into the space the wave is measured in */
+uniform vec4 uRip, uRip2, uRip3; uniform mat3 uRipM; uniform vec2 uRipO, uRipVP; uniform sampler2D uMatte; uniform vec4 uMatteRect; uniform bool uMatteOn;
 in vec2 vUv; out vec4 outColor;
 const float PI = 3.14159265359;
 
@@ -425,6 +428,74 @@ vec3 premium(vec2 uv, float p, int e){
   return mix(SA(uv), SB(uv), p);
 }
 
+
+/* ---- Clyra ripple, NameDrop preset: several thick refractive waves that gather, release, travel, strike and settle ---- */
+/* how far a stage point is from the wave's origin, in the space the scan gives: screen, the shot's scene (taken back
+   through the camera), a rectified surface, or a corridor's depth through connected floor, walls and ceiling */
+float ripDist(vec2 uv){
+  vec2 s = cover(uv, uAspA); int m = int(uRip3.x + .5);
+  if (m == 0) return length((s - uRipO) * vec2(uAspA, 1.));
+  vec3 h = uRipM * vec3(s, 1.); if (h.z <= 1e-4) return 1e3; vec2 r = h.xy / h.z;
+  if (m == 1) return length((r - uRipO) * vec2(uAspA, 1.));
+  if (m == 2) return length(r - uRipO);
+  vec2 q = (r - uRipVP) * vec2(uAspA, 1.), q0 = (uRipO - uRipVP) * vec2(uAspA, 1.); float ax = .5 * uAspA, ay = .5;
+  float z = 1. / max(max(abs(q.x) / ax, abs(q.y) / ay), .03), z0 = 1. / max(max(abs(q0.x) / ax, abs(q0.y) / ay), .03);
+  return abs(z - z0) * .25;
+}
+/* the wave field at a distance d: x = displacement along the distance gradient (distance units), y = crest height */
+vec2 ripField(float d, float p){
+  float N = clamp(uRip.y, 1., 8.), w0 = max(uRip.z, .004), A = uRip.w * (.4 + .9 * uIntensity);
+  float bld = clamp(uRip2.x, .03, .45), dis = clamp(uRip2.y, .05, .6), reach = max(uRip2.z, .05), imp = uRip2.w;
+  float ti = 1. - dis, soft = mix(.7, 1.5, clamp(uRip3.z, 0., 1.));
+  float decay = 1. - smoothstep(ti, 1., p); decay *= decay;
+  float disp = 0., hgt = 0.;
+  /* A: formation — the picture tightens toward the origin while small close rings gather */
+  float f = smoothstep(0., bld, p) * (1. - smoothstep(bld, bld + .12, p)), rf = .11 * reach;
+  disp += -A * .5 * f * f * d * exp(-pow(d / rf, 2.));
+  disp += A * .006 * f * sin(d / rf * 16. - p * 70.) * exp(-pow(d / (rf * 1.7), 2.));
+  hgt += .3 * f * exp(-pow(d / rf, 2.));
+  /* B, C: release and travel — thick waves one after another, each a little slower, wider and gentler; they arrive
+     together at the reach, where the impact happens */
+  float ip = imp * exp(-pow((p - ti) / .04, 2.));
+  for (int i = 0; i < 8; i++) { float fi = float(i); if (fi >= N) break;
+    float L = bld + (ti - bld) * .34 * fi / max(N - 1., 1.);
+    float k = (p - L) / max(ti - L, .05); if (k <= 0.) continue;
+    float sp = 1. - .055 * fi + .03 * sin(fi * 2.3 + uSeed) * uRip3.y;
+    float r = reach * sp * ((1. - pow(1. - min(k, 1.), 2.2)) + max(k - 1., 0.) * .3);
+    float lead = i == 0 ? 1. : 0.;
+    float w = w0 * soft * (1. + .22 * sin(fi * 1.7 + 1.)) * (.75 + .45 * min(k, 1.)) * (1. + lead * .9 * ip);
+    float a = A * (1. - .1 * fi) * smoothstep(0., .08, k * (ti - L)) * (.6 + .4 * min(k, 1.)) * (1. + lead * 1.4 * ip) * decay;
+    float x = (d - r) / w, en = exp(-.5 * x * x);
+    disp += -a * x * en * w; hgt += a * en;
+  }
+  /* D: impact — a short burst of finer rings out of the main front */
+  float pb = p - ti;
+  if (pb > 0. && imp > 0.) for (int j = 0; j < 3; j++) { float fj = float(j);
+    float r = reach * (1. + pb * (1. + .6 * fj)), w = w0 * .5;
+    float a = A * .5 * imp * exp(-pb * (8. + 3. * fj)) * (1. - fj * .25) * decay;
+    float x = (d - r) / w, en = exp(-.5 * x * x); disp += -a * x * en * w; hgt += .6 * a * en; }
+  return vec2(disp, hgt);
+}
+float ripMatte(vec2 s){ if (!uMatteOn || s.x < 0. || s.y < 0. || s.x > 1. || s.y > 1.) return 0.; return smoothstep(.35, .65, texture(uMatte, uMatteRect.xy + s * uMatteRect.zw).r); }
+vec3 rippleWaves(vec2 uv, float p){
+  vec2 ex = vec2(1.5 / uRes.x, 0.), ey = vec2(0., 1.5 / uRes.y);
+  float d = ripDist(uv);
+  vec2 g = vec2(ripDist(uv + ex) - ripDist(uv - ex), ripDist(uv + ey) - ripDist(uv - ey)) / vec2(2. * ex.x, 2. * ey.y);
+  vec2 W = ripField(d, p);
+  /* a displacement measured along the surface, as a move on the picture: far (compressed) waves move less */
+  vec2 off = g / max(dot(g, g), 1e-3) * W.x;
+  off *= smoothstep(0., .035, min(min(uv.x, 1. - uv.x), min(uv.y, 1. - uv.y)));
+  off = clamp(off, vec2(-.05), vec2(.05));
+  /* people in front of the wave keep their own pixels, and the wave never drags them across the background */
+  float fg = ripMatte(cover(uv, uAspA)); off *= (1. - fg) * (1. - ripMatte(cover(uv + off, uAspA)));
+  vec2 q = clamp(uv + off, vec2(.0005), vec2(.9995)), dq = off * uGlow * .3;
+  vec3 a = vec3(SA(q + dq).r, SA(q).g, SA(q - dq).b), b = vec3(SB(q + dq).r, SB(q).g, SB(q - dq).b);
+  vec3 col = mix(a, b, smoothstep(.4, .6, p));
+  /* light on the crest's lit slope: from the displacement itself, which passes smoothly through zero at the crest line
+     (its direction flips there, and lighting by direction drew a hard-edged band) */
+  float lit = smoothstep(0., 1., clamp(dot(off, normalize(vec2(-.55, -.83))) / .012, 0., 1.));
+  return col + vec3(.92, .96, 1.) * lit * min(W.y, 1.2) * uRip3.w * .12 * (1. - fg);
+}
 vec3 frameAt(vec2 uv, float p){
   float q = ease(p);
   int e = uEffect;
@@ -496,9 +567,10 @@ vec3 frameAt(vec2 uv, float p){
   if (e == 44) return pageCurl(uv, p);
   if (e == 50) { float b = mix(1., max(2., uIntensity * uRes.y * .09), sin(PI * p)); vec2 cell = uRes / b; vec2 u2 = (floor(uv * cell) + .5) / cell;
     if (b < 1.01) u2 = uv; return mix(SA(u2), SB(u2), smoothstep(.45, .55, p)); }
-  if (e == 51) { vec2 c = (uv - uCenter) * vec2(uAspect, 1.); float dist = length(c); float env = uIntensity * .035 * sin(PI * p);
+  if (e == 51 && uRip.x < .5) { vec2 c = (uv - uCenter) * vec2(uAspect, 1.); float dist = length(c); float env = uIntensity * .035 * sin(PI * p);
     float w = sin(dist * 55. - p * 22.); vec2 u2 = uv + normalize(c + 1e-5) / vec2(uAspect, 1.) * w * env;
     vec3 col = mix(SA(u2), SB(u2), smoothstep(.4, .6, p)); return col + vec3(max(w, 0.) * env * 4.); }
+  if (e == 51) return rippleWaves(uv, p);
   if (e == 52) { float st = floor(p * 10.) / 10.; float env = uIntensity * pow(sin(PI * p), 1.5); float slice = floor(uv.y * 24.);
     float h = hash(slice + st * 31.); float off = h > .55 ? (hash(slice * 3.1 + st * 7.) - .5) * env * .25 : 0.; vec2 u2 = uv + vec2(off, 0.); float sp = env * .02;
     bool useB = p >= .5; vec3 col = useB ? vec3(SB(u2 + vec2(sp, 0)).r, SB(u2).g, SB(u2 - vec2(sp, 0)).b) : vec3(SA(u2 + vec2(sp, 0)).r, SA(u2).g, SA(u2 - vec2(sp, 0)).b);
@@ -584,8 +656,8 @@ export class TransitionRenderer {
     this.prog = prog; gl.useProgram(prog);
     this.u = {};
     for (const name of ['uA', 'uB', 'uEffect', 'uEase', 'uDir', 'uStrips', 'uTaps', 'uP', 'uIntensity', 'uMotionBlur', 'uFeather', 'uHold', 'uAngle', 'uGrain', 'uSeed', 'uAspect', 'uAspA', 'uAspB', 'uDp', 'uColor', 'uColor2', 'uCenter', 'uRes', 'uLinear', 'uMotion',
-      'uAmount', 'uBalance', 'uSplit', 'uMatch', 'uShadow', 'uGlow', 'uScale', 'uIn', 'uOut']) this.u[name] = gl.getUniformLocation(prog, name);
-    gl.uniform1i(this.u.uA, 0); gl.uniform1i(this.u.uB, 1);
+      'uAmount', 'uBalance', 'uSplit', 'uMatch', 'uShadow', 'uGlow', 'uScale', 'uIn', 'uOut', 'uRip', 'uRip2', 'uRip3', 'uRipM', 'uRipO', 'uRipVP', 'uMatte', 'uMatteRect', 'uMatteOn']) this.u[name] = gl.getUniformLocation(prog, name);
+    gl.uniform1i(this.u.uA, 0); gl.uniform1i(this.u.uB, 1); gl.uniform1i(this.u.uMatte, 2);
     this.programs.set(code,{prog:this.prog,u:this.u});if(this.programs.size>12){const first=this.programs.keys().next().value;gl.deleteProgram(this.programs.get(first).prog);this.programs.delete(first);}
   }
 
@@ -608,6 +680,35 @@ export class TransitionRenderer {
     gl.uniform1f(u.uAmount, o.amount ?? 1); gl.uniform1f(u.uBalance, o.balance ?? 0); gl.uniform1f(u.uSplit, o.split ?? 0.5);
     gl.uniform1f(u.uMatch, o.match ?? 0); gl.uniform1f(u.uShadow, o.shadow ?? 0); gl.uniform1f(u.uGlow, o.glow ?? 0);
     gl.uniform3fv(u.uColor2, hex(o.color2 ?? o.color)); gl.uniform1f(u.uScale, o.scale ?? 2); gl.uniform1f(u.uIn, o.zoomIn ?? 0.35); gl.uniform1f(u.uOut, o.zoomOut ?? 0.35);
+    if (def.code === 51) this.ripple(o, w / h, srcA ? aspectOf(srcA) : w / h, params);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  /** The ripple's own settings and, when the clip was scanned, this frame's geometry and people matte (ripple-env.js). */
+  ripple(o, stageAspect, sourceAspect, saved = {}) {
+    const gl = this.gl, u = this.u, num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+    /* a ripple saved before the NameDrop preset existed (its settings stored, but no style among them) keeps the classic
+       wave it was made with; a new one, or one with a style, draws that style */
+    const classic = (saved.rippleStyle ?? ('intensity' in saved ? 'classic' : o.rippleStyle)) === 'classic';
+    const geo = o.rippleGeometry ?? null, placement = o.placement ?? 'scene';
+    /* the start point, as the source pixel under it (the picture covers the stage) */
+    const r = stageAspect / sourceAspect, sc = r > 1 ? [1, 1 / r] : [r, 1], c = o.center ?? [0.5, 0.5];
+    const screenOrigin = [(c[0] - 0.5) * sc[0] + 0.5, (c[1] - 0.5) * sc[1] + 0.5];
+    const mode = placement === 'screen' || !geo ? 0 : geo.mode;
+    gl.uniform4f(u.uRip, classic ? 0 : 1, Math.round(num(o.waves, 5)), num(o.thickness, 0.045), num(o.refraction, 0.6));
+    gl.uniform4f(u.uRip2, num(o.buildUp, 0.18), num(o.dissipate, 0.25), num(o.reach, 0.9), num(o.impact, 0.7));
+    gl.uniform4f(u.uRip3, mode, num(o.interference, 0.5), num(o.softness, 0.5), num(o.highlight, 0.5));
+    gl.uniformMatrix3fv(u.uRipM, true, mode ? geo.M : [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    gl.uniform2fv(u.uRipO, mode ? geo.origin : screenOrigin);
+    gl.uniform2fv(u.uRipVP, mode ? geo.vp : screenOrigin);
+    const matte = placement === 'scene' && geo?.matte?.image ? geo.matte : null;
+    gl.uniform1i(u.uMatteOn, matte ? 1 : 0);
+    if (matte) {
+      if (!this.matteTex) { this.matteTex = gl.createTexture(); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.matteTex); for (const [k, v] of [[gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE], [gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR]]) gl.texParameteri(gl.TEXTURE_2D, k, v); }
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.matteTex);
+      /* an atlas holds many frames: uploaded once, then only the sub-rectangle changes */
+      if (this.matteImage !== matte.image) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, matte.image); this.matteImage = matte.image; }
+      gl.uniform4fv(u.uMatteRect, matte.rect);
+    }
   }
 }

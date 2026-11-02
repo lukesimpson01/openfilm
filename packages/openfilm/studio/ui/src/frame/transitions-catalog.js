@@ -8,6 +8,14 @@ const dir4 = ['left', 'right', 'up', 'down'];
 const e = (id, name, group, code, o = {}) => ({ id: `classic.${id}`, name, group, code, premium: !!o.premium, motion: !!o.motion, defaultDuration: o.duration ?? 0.5, sfx: o.sfx ?? null, about: o.about ?? '', also: o.also ?? [], styles: o.styles ?? null,
   params: o.params ?? [P.intensity], directions: o.directions ?? null, defaults: { intensity: 0.7, motionBlur: o.motion ? 1 : 0, feather: 0.03, color: '#000000', hold: 0, strips: 8, angle: 35, grain: 0.5, center: [0.5, 0.5], ...(o.defaults || {}) } });
 
+/* Clyra's ripple (shader effect 51): the classic single wave, kept as a style for projects made with it, and the
+   NameDrop style — several thick refractive waves that gather, travel, strike and settle; with a 3D scan of the clip they
+   travel through the scene (its camera, a surface, or a corridor's floor and walls) and pass behind people. One
+   implementation: the transition between clips and the one-clip effect are the same shader. */
+const RIPPLE_STYLES = ['namedrop', 'classic'];
+const RIPPLE_PARAMS = ['rippleStyle', 'intensity', 'center', 'waves', 'thickness', 'geometry', 'placement', 'reach', 'refraction', 'buildUp', 'dissipate', 'impact', 'interference', 'softness', 'highlight', 'glow'];
+const RIPPLE_DEFAULTS = { rippleStyle: 'namedrop', intensity: 0.7, center: [0.5, 0.5], waves: 5, thickness: 0.045, geometry: 'auto', placement: 'scene', reach: 0.9, refraction: 0.6, buildUp: 0.18, dissipate: 0.25, impact: 0.7, interference: 0.5, softness: 0.5, highlight: 0.5, glow: 0.25 };
+const RIPPLE_ABOUT = 'Several thick refractive waves gather at a point, travel out, strike and settle. With a 3D scan of the clip they stay in the scene as the camera moves, follow a surface or a corridor, and pass behind people.';
 export const TRANSITION_GROUPS = ['Creator Effects', 'Cinematic', 'Shutters & reveals', 'Modern', 'Fades & blends', 'Camera moves', 'Wipes & masks', '3D', 'Stylized'];
 export const TRANSITIONS = [
   e('mix', 'Mix', 'Fades & blends', 1, { params: [] }),
@@ -48,7 +56,7 @@ export const TRANSITIONS = [
   e('page_curl', 'Page Curl', '3D', 44, { premium: true, params: [], duration: 0.7 }),
 
   e('mosaic', 'Mosaic', 'Stylized', 50, { params: [P.intensity] }),
-  e('ripple', 'Ripple', 'Stylized', 51, { premium: true, params: [P.intensity, P.center] }),
+  e('ripple', 'Ripple', 'Stylized', 51, { premium: true, duration: 1.2, about: RIPPLE_ABOUT, styles: RIPPLE_STYLES, params: RIPPLE_PARAMS, defaults: RIPPLE_DEFAULTS }),
   e('glitch', 'Glitch', 'Stylized', 52, { also: ['Creator Effects'], premium: true, params: [P.intensity] }),
   e('flash_cut', 'Flash Cut', 'Stylized', 53, { params: [], duration: 0.2 }),
   e('black_flash', 'Black Flash', 'Stylized', 54, { params: [], duration: 0.2 }),
@@ -122,6 +130,7 @@ export const EFFECTS = [
   fx('glitch', 'Glitch Snap', 94, { duration: 0.5, about: 'A very short RGB displacement and frame break on the beat point.', params: [P.split, P.intensity], defaults: { split: 0.2, intensity: 0.8 } }),
   fx('leak', 'Film Burn / Light Leak', 95, { duration: 1.4, about: 'Warm light drifting across the frame, exposure rising and falling.', params: [P.intensity, P.direction], directions: ['left', 'right'], defaults: { intensity: 0.7, direction: 'left' } }),
   fx('roll', 'Smooth Camera Roll', 96, { duration: 1.2, about: 'Turns the picture about a point with a matched zoom (no corners show) and back.', params: [P.angle, P.direction, P.center, P.zoomIn, P.zoomOut], directions: ['cw', 'ccw'], defaults: { angle: 12, direction: 'cw', center: [0.5, 0.5], zoomIn: 0.4, zoomOut: 0.4 } }),
+  fx('ripple', 'Ripple', 51, { duration: 2.4, about: RIPPLE_ABOUT, styles: RIPPLE_STYLES, params: RIPPLE_PARAMS, defaults: RIPPLE_DEFAULTS }),
   fx('splitFreeze', 'Split-Frame Freeze', 97, { duration: 1.2, about: 'Holds the frame and cuts it into strips that slide apart in turn.', params: [P.strips, P.amount, P.color], defaults: { strips: 4, amount: 0.6, color: '#000000' } }),
 ];
 export const transitionById = (id) => (String(id).startsWith('fx.') ? EFFECTS.find((t) => t.id === id) : TRANSITIONS.find((t) => t.id === id));

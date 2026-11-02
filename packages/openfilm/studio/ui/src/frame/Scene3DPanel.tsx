@@ -14,7 +14,7 @@ import { footageRect, clipFit, clamp, fitItem } from './track-space.js';
 import { addTracked, itemFor, EFFECT_MODES, type EffectMode } from './tracked';
 import { footageAt } from './zoom';
 import { lineOf } from './lines';
-import { round, putFile } from './layers';
+import { round, putFile, writeLayer } from './layers';
 import { freezeFrame } from './freeze';
 import { StageOverlay, ScanOverlay, ScanProgress } from './StageOverlay';
 import { ForegroundOutline } from './ForegroundOutline';
@@ -343,6 +343,19 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   const subjectAt=(u:number,v:number)=>{const c=document.querySelector<HTMLCanvasElement>('[data-foreground-outline] canvas');if(!c||!c.width||!c.dataset.maskTimestamp)return false;try{const d=c.getContext('2d',{willReadFrequently:true})!.getImageData(Math.min(c.width-1,Math.floor(u*c.width)),Math.min(c.height-1,Math.floor(v*c.height)),1,1).data;return d[3]>0;}catch{return false;}};
   subjectAtRef.current=subjectAt;
   const snap=(sx:number,sy:number):[number,number]=>{let best:[number,number]|null=null,d=rect.w*.022;for(const m of surfaceMarkers){const k=Math.hypot(m.x-sx,m.y-sy);if(k<d){d=k;best=[m.x,m.y];}}return best??[sx,sy];};
+  /* the ripple effect on this clip, tied to its scan: waves start at the chosen point (or the middle) and travel through
+     the scene the scan measured; the one shader both the preview and the export draw (transition-gl.js, effect 51) */
+  const addRippleHere = async () => {
+    if (!f || !result) return;
+    const { addEffect } = await import('./zoom');
+    const made = await addEffect(projectId, film, at, 'fx.ripple', f.clip.id);
+    if ('error' in made) { notify(made.error ?? 'The ripple could not be added here.'); return; }
+    const origin: [number, number] = pick ? [clamp((pick.currentX ?? pick.x) / result.w), clamp((pick.currentY ?? pick.y) / result.h)] : [.5, .5];
+    const layer = { ...made.layer, params: { ...(made.layer.params ?? {}), scene: `assets/track/${result.id}.result.json`, origin, originTime: pick?.time ?? sceneTime } };
+    await writeLayer(projectId, layer);
+    await place(made.op, layer.id, 'Add ripple', 'Effects');
+    notify(`Ripple added${pick ? ' at the chosen point' : ''}. It follows this clip’s scan; its settings are in the inspector.`);
+  };
   const toFootage = (sx: number, sy: number) => {const hit=subjectAt(clamp((sx-rect.x)/rect.w),clamp((sy-rect.y)/rect.h));setOnSubject(hit);setForeground(hit?'behind':'auto');const p=referenceInScene(result?.scene,result?.planes,sceneTracks,sceneTime,[clamp((sx-rect.x)/rect.w)*(result?.w??1),clamp((sy-rect.y)/rect.h)*(result?.h??1)],result?.w??1,result?.h??1,sceneH);let spatialAnchor;if(result?.spatial&&sceneTracks[result.spatial])try{{const sol=sceneTracks[result.spatial],us=Math.round(sceneTime*1e6),px:[number,number]=[clamp((sx-rect.x)/rect.w)*sol.width,clamp((sy-rect.y)/rect.h)*sol.height];if(customPoint)throw new Error('custom point');spatialAnchor=surfaceAnchor(sol,us,px);
   /* sparse points behind glass or across a street can fit a surface the camera sees edge-on (text on it would vanish): such a fit is not trusted, the text stands at that depth facing the camera instead */
   const pose=spatialPoseAt(sol,us),n=spatialAnchor?.normal,ray=pose&&cameraRay(px,pose).direction,facing=n&&ray?Math.abs(n[0]*ray[0]+n[1]*ray[1]+n[2]*ray[2]):1;
@@ -457,6 +470,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                   <p role="status" className="text-[12px] font-medium text-[var(--text)]">{result.spatial&&!sceneTracks[result.spatial]?'Preparing the scanned surfaces…':picking?'Click a diamond or a point on the video':pick?'Position selected':'Choose a position on the video'}</p>
                   {result.spatial&&<div className={segWrap} role="group" aria-label="What a click places"><button type="button" aria-pressed={!customPoint} className={seg(!customPoint)} onClick={()=>setCustomPoint(false)}>On a surface</button><button type="button" aria-pressed={customPoint} className={seg(customPoint)} onClick={()=>setCustomPoint(true)}>Custom point</button></div>}
                   {!picking&&<button type="button" onClick={() => {if(!footageVisible&&f)window.dispatchEvent(new CustomEvent('frame-seek',{detail:f.start+.03}));setPicking(true);}} className={T.secondary}><Crosshair size={13} />{pick?'Choose another point':'Place text on the video'}</button>}
+                  {!picking&&<button type="button" onClick={()=>void addRippleHere().catch(e=>notify(e instanceof Error?e.message:String(e)))} className={T.secondary}><Sparkles size={13} />{pick?'Add ripple at this point':'Add ripple to this shot'}</button>}
                   {ambiguous&&result?.spatial&&sceneTracks[result.spatial]&&<div className="flex flex-col gap-1.5 rounded-lg border border-[var(--border)] p-2.5"><p className={T.hint}>No flat surface here, so the text floats in the scene. Drag to set how far.</p><input aria-label="Float distance" type="range" min={.25} max={20} step={.05} value={floatDistance} onChange={e=>{const d=Number(e.target.value);setFloatDistance(d);try{const sol=sceneTracks[result.spatial!],time=pick?.time??sceneTime,a=worldAnchor(sol,Math.round(time*1e6),[(pick?.currentX??.5)*sol.width,(pick?.currentY??.76)*sol.height],d);setPick(q=>q&&{...q,spatialAnchor:{...a,manual:true,depthSource:'user'}});}catch(err){notify((err as Error).message);}}} className="min-w-0 accent-[var(--accent)]"/></div>}
           {placementPreview&&result?.spatial&&sceneTracks[result.spatial]&&<SpatialPlacementPreview projectId={projectId} folder={folder} solution={sceneTracks[result.spatial]} item={placementPreview} time={sceneTime} sourceRect={rect}/>}
           

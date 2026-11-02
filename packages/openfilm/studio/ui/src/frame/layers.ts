@@ -9,6 +9,7 @@ import subtitleStyles from './subtitle-styles.js?raw';
 import wyrRuntime from './wyr-runtime.js?raw';
 import transitionRuntime from './transition-runtime.js?raw';
 import transitionGl from './transition-gl.js?raw';
+import rippleEnvSrc from './ripple-env.js?raw';
 import transitionCatalog from './transitions-catalog.js?raw';
 import mgRuntime from './mg-runtime.js?raw';
 import mgLib from './motion-graphics.js?raw';
@@ -99,7 +100,7 @@ const RUNTIME: [string, string][] = [
   ['engine.js', engineSrc], ['runtime.js', runtimeSrc], ['chat-runtime.js', chatRuntime], ['chat.css', chatCss],
   ['reddit-runtime.js', redditRuntime], ['reddit.css', redditCss], ['subtitle-runtime.js', subtitleRuntime],
   ['subtitle-styles.js', subtitleStyles], ['wyr-runtime.js', wyrRuntime],
-  ['transition-runtime.js', transitionRuntime], ['transition-gl.js', transitionGl], ['transitions-catalog.js', transitionCatalog],
+  ['transition-runtime.js', transitionRuntime], ['transition-gl.js', transitionGl], ['ripple-env.js', rippleEnvSrc], ['transitions-catalog.js', transitionCatalog],
   ['mg-runtime.js', mgRuntime], ['motion-graphics.js', mgLib], ['world.json', worldGeo],
   ['motion3d.js', motion3dSrc], ['scene3d-runtime.js', scene3dSrc], ['camera-runtime.js', cameraSrc], ['track-runtime.js', trackRuntimeSrc], ['track-core.js', trackCoreSrc], ['custom-runtime.js', customRuntimeSrc],
 ];

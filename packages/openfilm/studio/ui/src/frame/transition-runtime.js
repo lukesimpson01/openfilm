@@ -6,6 +6,7 @@
    A placed transition can carry its own speed graph (`params.curve`): progress over its time, for that one transition
    only (the catalog's defaults never change). */
 import { TransitionRenderer, curveAt } from './transition-gl.js';
+import { loadRippleScene, rippleGeometryAt } from './ripple-env.js';
 
 const VIDEO = /\.(mp4|mov|webm|m4v|mkv)$/i;
 const DIPS = new Set(['classic.black_fade', 'classic.black_flash']);
@@ -48,7 +49,14 @@ export function createTransition(layer, root) {
   /* ready means ready to play through: both videos already at their first frames and that frame drawn, while the page
      wakes ahead of the cut. Seeking them only once the cut is reached (mid-GOP, both at once) left a live preview
      black for its first part, and the motion late */
-  const ready = Promise.all([loaded(A), loaded(B)]).then(() => run.frame(0)).catch(() => {});
+  /* a ripple placed on a scanned clip: the scan's camera, surfaces and people, loaded once and read each frame */
+  const rippleScene = layer.params?.scene && /ripple$/.test(String(layer.effect))
+    ? loadRippleScene(layer.params.scene, {
+        fetchJson: (path) => fetch(`../${path}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        loadImage: (path) => new Promise((done) => { const img = new Image(); img.onload = () => done(img); img.onerror = () => done(null); img.src = `../${path}`; }),
+      }).catch(() => null)
+    : Promise.resolve(null);
+  const ready = Promise.all([loaded(A), loaded(B), rippleScene]).then(() => run.frame(0)).catch(() => {});
   const run = {
     duration,
     get ready() { return ready; },
@@ -80,8 +88,17 @@ export function createTransition(layer, root) {
       /* velocity: the curve retimed the footage, the picture is drawn straight */
       if (layer.effect === 'fx.velocity') p = u;
       /* a reversed reveal: B opens back into A */
-      if (layer.params?.reverse) renderer.render(B, A, 1 - p, { ...layer.params, id: layer.effect, duration, fps: layer.fps || 40, seed: layer.seed });
-      else renderer.render(A, B, p, { ...layer.params, id: layer.effect, duration, fps: layer.fps || 40, seed: layer.seed });
+      let rippleGeometry = null;
+      const scene = await rippleScene;
+      if (scene) {
+        const w = A.videoWidth || A.naturalWidth || 16, h = A.videoHeight || A.naturalHeight || 9;
+        const want = layer.params.geometry === 'auto' || !layer.params.geometry ? (layer.params.surfaceQuad ? 'surface' : scene.foe ? 'corridor' : 'scene') : layer.params.geometry;
+        /* the point picked on the stage, as the source pixel under it (the picture covers the stage) */
+        const r = (canvas.width / canvas.height) / (w / h), sc = r > 1 ? [1, 1 / r] : [r, 1], c = layer.params.center ?? [0.5, 0.5];
+        rippleGeometry = rippleGeometryAt(scene, aTime, { want, origin: layer.params.origin ?? [(c[0] - 0.5) * sc[0] + 0.5, (c[1] - 0.5) * sc[1] + 0.5], start: layer.params.originTime ?? (layer.aAt ?? 0), surfaceQuad: layer.params.surfaceQuad ?? null, aspect: w / h });
+      }
+      if (layer.params?.reverse) renderer.render(B, A, 1 - p, { ...layer.params, rippleGeometry, id: layer.effect, duration, fps: layer.fps || 40, seed: layer.seed });
+      else renderer.render(A, B, p, { ...layer.params, rippleGeometry, id: layer.effect, duration, fps: layer.fps || 40, seed: layer.seed });
     },
   };
   return run;
