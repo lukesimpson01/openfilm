@@ -29,7 +29,7 @@ export async function startSpatialJob(root,request){
   root=resolve(root);if(!spatialStatus().native)throw new Error('Native spatial analysis is not installed. Run tools/setup-shorts-spatial.py.');
   const source=readable(root,String(request.src)),from=Number(request.from),to=Number(request.to);
   if(!/\.(mov|mp4|m4v|webm|mkv)$/i.test(source)||!Number.isFinite(from)||!Number.isFinite(to)||from<0||to<=from||to-from>600)throw new Error('Select a video range between 0 and 10 minutes.');
-  const kind=['occlusion','planar','mask-correction','refine-track'].includes(request.kind)?request.kind:'camera';
+  const kind=['occlusion','planar','mask-correction','refine-track','faces'].includes(request.kind)?request.kind:'camera';
   if(kind==='occlusion'&&!spatialStatus().advanced)throw new Error('Detailed foreground analysis is not installed. Run tools/setup-shorts-spatial.py --advanced.');
   const instances=kind==='occlusion'?(Array.isArray(request.instances)?request.instances:[]).slice(0,6).map((p,i)=>({id:i+1,box:Array.isArray(p.box)?p.box.map(v=>Math.max(0,Math.min(1,Number(v)))):[]})):[];
   if(kind==='occlusion'&&(!instances.length||instances.some(p=>p.box.length!==4||!p.box.every(Number.isFinite)||p.box[2]<=p.box[0]||p.box[3]<=p.box[1])))throw new Error('Enhanced occlusion needs verified instance selections.');
@@ -41,7 +41,7 @@ export async function startSpatialJob(root,request){
   const refine=kind==='refine-track'?{trackW:Number(request.trackW),trackH:Number(request.trackH),times:request.times,H:request.H,lost:request.lost,refIndex:Number(request.refIndex)||0}:null;
   if(refine&&(!(refine.trackW>0&&refine.trackH>0)||!Array.isArray(refine.times)||refine.times.length<2||refine.times.length>1500||!Array.isArray(refine.H)||refine.H.length!==refine.times.length||refine.H.some(h=>!Array.isArray(h)||h.length!==9||h.some(v=>!Number.isFinite(v)))||refine.times.some(t=>!Number.isFinite(t))||!(refine.refIndex>=0&&refine.refIndex<refine.times.length)))throw new Error('A track to refine needs matching times and matrices.');
   const sourceHash=(await sourceFingerprint(root,request.src)).hash,params={from,to,...(baseOcclusion?{baseOcclusionHash:await digest(baseOcclusion),corrections}:{}),...(content?{content}:{}),fps:Math.max(2,Math.min(10,Number(request.fps)||6)),...(quad?{quad}:{}),...(refine?refine:{}),maxFrames:Math.max(12,Math.min(240,Number(request.maxFrames)||120)),longest:960,...(kind==='occlusion'?{instances,nativeResolution:request.nativeResolution===true,solution:request.solution,solutionHash:solution?await digest(solution):null}:{} )};
-  const id=createHash('sha256').update(JSON.stringify(['spatial-v7',spatialStatus().versions,kind,sourceHash,params])).digest('hex').slice(0,24),key=root+':'+id,path=`assets/spatial/${id}/${kind==='occlusion'||kind==='mask-correction'?'occlusion':kind==='planar'||kind==='refine-track'?'track':'solution'}.json`,output=join(root,'assets','spatial',id);
+  const id=createHash('sha256').update(JSON.stringify(['spatial-v7',spatialStatus().versions,kind,sourceHash,params])).digest('hex').slice(0,24),key=root+':'+id,path=`assets/spatial/${id}/${kind==='occlusion'||kind==='mask-correction'?'occlusion':kind==='planar'||kind==='refine-track'?'track':kind==='faces'?'faces':'solution'}.json`,output=join(root,'assets','spatial',id);
   if(validResult(root,path,kind))return {id,state:'done',share:1,path,cached:true};
   if(jobs.has(key)&&!['cancelled','error'].includes(jobs.get(key).state))return snapshot(jobs.get(key));
   for(const [old,job] of jobs)if(job.finishedAt&&Date.now()-job.finishedAt>3600000)jobs.delete(old);
@@ -49,18 +49,18 @@ export async function startSpatialJob(root,request){
   await mkdir(output,{recursive:true});const config=join(output,'request.json');await writeFile(config,JSON.stringify({...params,source,sourceHash,output,workspace:runtimeHome(),solution,baseOcclusion,corrections,memoryBudgetBytes:Math.min(3*1024**3,totalmem()*.35)}));
   const job={id,root,path,state:'queued',share:0,stage:'Waiting for native analysis',cancelled:false};jobs.set(key,job);
   const run=queue.catch(()=>{}).then(async()=>{if(job.cancelled)return;job.state='running';await new Promise(done=>{
-    const child=spawn(python(),['-u',join(here,'spatial',kind==='mask-correction'?'mask_corrections.py':kind==='occlusion'?'occlusion.py':kind==='planar'?'planar.py':kind==='refine-track'?'refine_track.py':'engine.py'),'--config',config],{stdio:['ignore','pipe','pipe'],windowsHide:true,env:{...process.env,OMP_NUM_THREADS:'2',OPENBLAS_NUM_THREADS:'2'}});job.child=child;let pending='',diagnostics='';
+    const child=spawn(python(),['-u',join(here,'spatial',kind==='mask-correction'?'mask_corrections.py':kind==='occlusion'?'occlusion.py':kind==='planar'?'planar.py':kind==='refine-track'?'refine_track.py':kind==='faces'?'faces.py':'engine.py'),'--config',config],{stdio:['ignore','pipe','pipe'],windowsHide:true,env:{...process.env,OMP_NUM_THREADS:'2',OPENBLAS_NUM_THREADS:'2'}});job.child=child;let pending='',diagnostics='';
     const timer=setTimeout(()=>{job.error='Native reconstruction exceeded its 15 minute budget.';child.kill();},900000);
     child.stdout.on('data',chunk=>{pending+=chunk;const lines=pending.split('\n');pending=lines.pop();for(const line of lines){try{const message=JSON.parse(line);if(message.type==='progress'){job.stage=message.stage;job.share=message.share;}if(message.type==='error')job.error=message.message;}catch{}}});
     child.stderr.on('data',chunk=>diagnostics=(diagnostics+chunk).slice(-4000));
     child.once('error',error=>{job.error=error.message;job.state='error';clearTimeout(timer);done();});
-    child.once('exit',code=>{clearTimeout(timer);job.child=null;if(job.cancelled){job.state='cancelled';}else if(code===0&&validResult(root,path,kind)){job.state='done';job.share=1;job.stage=kind==='occlusion'?'Foreground analysis ready':kind==='mask-correction'?'Mask corrections ready':'Camera reconstruction ready';}else{job.state='error';job.error=job.error||'The camera could not be reconstructed reliably.';}job.finishedAt=Date.now();done();});
+    child.once('exit',code=>{clearTimeout(timer);job.child=null;if(job.cancelled){job.state='cancelled';}else if(code===0&&validResult(root,path,kind)){job.state='done';job.share=1;job.stage=kind==='faces'?'Faces found':kind==='occlusion'?'Foreground analysis ready':kind==='mask-correction'?'Mask corrections ready':'Camera reconstruction ready';}else{job.state='error';job.error=job.error||'The camera could not be reconstructed reliably.';}job.finishedAt=Date.now();done();});
   });});queue=run;run.catch(e=>{job.state='error';job.error=e.message;});return snapshot(job);
 }
 function snapshot(job){return {id:job.id,state:job.state,share:job.share,stage:job.stage,path:job.state==='done'?job.path:undefined,error:job.error};}
 export function spatialJob(root,id,cancel=false){
   if(!/^[a-f0-9]{24}$/.test(id))throw new Error('Invalid spatial job.');
-  const job=jobs.get(resolve(root)+':'+id);if(!job){for(const file of ['solution.json','occlusion.json','track.json']){const path=`assets/spatial/${id}/${file}`;if(validResult(root,path,file==='solution.json'?'camera':file==='track.json'?'planar':'occlusion'))return {id,state:'done',share:1,path,cached:true};}throw new Error('Spatial job not found.');}
+  const job=jobs.get(resolve(root)+':'+id);if(!job){for(const file of ['solution.json','occlusion.json','track.json','faces.json']){const path=`assets/spatial/${id}/${file}`;if(validResult(root,path,file==='solution.json'?'camera':file==='track.json'?'planar':'occlusion'))return {id,state:'done',share:1,path,cached:true};}throw new Error('Spatial job not found.');}
   if(cancel){job.cancelled=true;job.child?.kill();if(job.state==='queued')job.state='cancelled';}
   return snapshot(job);
 }

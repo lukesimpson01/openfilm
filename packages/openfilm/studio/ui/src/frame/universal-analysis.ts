@@ -101,6 +101,8 @@ async function analyseTargetSource(o: {
       o.from,
       o.to,
       { ...o.selection, id: undefined },
+      /* a face is followed by the AI Clipper's tracker now: a track made before that is not reused for it */
+      o.selection.kind === "face" ? "clipper-face-1" : null,
     ]),
     digest = await crypto.subtle.digest(
       "SHA-256",
@@ -123,6 +125,26 @@ async function analyseTargetSource(o: {
       } as TargetTrack & {
         path: string;
       };
+    }
+  }
+  /* Face: the AI Clipper's tracker (every face detected on every frame, identities held) when the native runtime is here */
+  if (o.selection.kind === "face" && !o.repair) {
+    const native = await nativeFaceTrack(o);
+    if (native) {
+      const result: TargetTrack = {
+          version: 1, id, src: o.src, clipId: o.clipId, sourceWidth: native.w, sourceHeight: native.h, from: o.from, to: o.to,
+          selection: o.selection, observations: native.observations, corrections: [...(o.existing?.corrections ?? [])],
+          metrics: {
+            frames: native.observations.length, jobFrames: native.observations.length,
+            meanMs: native.elapsedMs / Math.max(1, native.observations.length), p95Ms: 0, elapsedMs: performance.now() - started,
+            observedShare: native.observations.filter((p) => p.status === "observed").length / Math.max(1, native.observations.length),
+          },
+          notes: [`Faces found by the AI Clipper's tracker (${native.backend}); face ${native.faceId} followed by identity.`],
+        };
+      o.signal.throwIfAborted();
+      const saved = await putFile(o.projectId, path, JSON.stringify(result));
+      o.progress(1, "Source track saved");
+      return { ...result, path: saved };
     }
   }
   o.progress(0, "Opening source frames");
@@ -485,6 +507,37 @@ async function analyseTargetSource(o: {
   }
 }
 
+
+/** The native face job (spatial/faces.py, the AI Clipper's tracker), turned into this selection's observations. Null when the
+ * native runtime is missing, the job fails, or the click is not on a face: the in-browser tracker then runs as before. */
+async function nativeFaceTrack(o: { projectId: string; folder: string; src: string; from: number; to: number; selection: TargetSelection; signal: AbortSignal; progress: (p: number, m: string) => void }) {
+  const base = `/api/projects/${o.projectId}/spatial`;
+  try {
+    const status = await fetch(base + "/status", { signal: o.signal }).then((r) => (r.ok ? r.json() : null));
+    if (!status?.native) return null;
+    o.progress(0.05, "Finding every face in the clip");
+    const r = await fetch(base + "/jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "faces", src: o.src, from: o.from, to: o.to }), signal: o.signal });
+    const initial = await r.json();
+    if (!r.ok) return null;
+    let job = initial;
+    while (job.state !== "done") {
+      o.signal.throwIfAborted();
+      if (["error", "cancelled"].includes(job.state)) return null;
+      await new Promise((ok) => setTimeout(ok, 300));
+      job = await fetch(`${base}/jobs/${initial.id}`, { signal: o.signal }).then((x) => x.json());
+      o.progress(Math.min(0.9, 0.05 + (job.share ?? 0) * 0.85), job.stage ?? "Finding every face in the clip");
+    }
+    const data = await fetch(`${o.folder}${job.path}`, { signal: o.signal, cache: "no-store" }).then((x) => (x.ok ? x.json() : null));
+    if (!data?.frames?.length) return null;
+    const { faceObservations } = await import("./face-native.js");
+    const picked = faceObservations(data, o.selection);
+    if (!picked) return null;
+    return { w: data.w as number, h: data.h as number, backend: String(data.backend), elapsedMs: Number(data.elapsedMs) || 0, faceId: picked.id, observations: picked.observations as TrackObservation[] };
+  } catch (e) {
+    if (o.signal.aborted) throw e;
+    return null;
+  }
+}
 const activeJobs = new Map<string, AbortController>();
 let activeWorkers = 0;
 const waiting: { signal: AbortSignal; start: () => void }[] = [];
