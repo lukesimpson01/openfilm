@@ -198,7 +198,11 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     },30);
     return()=>window.clearTimeout(timer);
   },[pick,scan,result?.spatial,sceneTracks]); // eslint-disable-line react-hooks/exhaustive-deps
-  const spots=React.useMemo(()=>scan?suggestSpots(scan.grays[0],scan.w,scan.h,{content:result?.content}):[],[scan,result?.content]); // eslint-disable-line react-hooks/exhaustive-deps
+  const subjectAtRef=React.useRef<(u:number,v:number)=>boolean>(()=>false);
+  /* the foreground outline arrives after the scan: once it has, the spots are chosen again with the people left out */
+  const [maskSeen,setMaskSeen]=React.useState(false);
+  React.useEffect(()=>{setMaskSeen(false);if(!scan||!result?.matte)return;const id=setInterval(()=>{const c=document.querySelector<HTMLCanvasElement>('[data-foreground-outline] canvas');if(c?.dataset.maskTimestamp){setMaskSeen(true);clearInterval(id);}},400);return()=>clearInterval(id);},[scan,result?.matte]);
+  const spots=React.useMemo(()=>scan?suggestSpots(scan.grays[0],scan.w,scan.h,{content:result?.content,count:16,separation:.11,avoid:maskSeen?(u:number,v:number)=>subjectAtRef.current(u,v):null}):[],[scan,result?.content,maskSeen]); // eslint-disable-line react-hooks/exhaustive-deps
   /* which way the surface under each diamond faces, found in the background once the frames are in: each diamond then
      shows the plane text would take there, and a click on one starts from it */
   const [facings,setFacings]=React.useState<Map<number,SpotFacing>>(new Map());
@@ -276,7 +280,6 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
 
   /* After-Effects-style targets: the solve's own landmarks sit on the paused picture, a hovered triangle of them shows its plane, a click (or a Shift-selection of several) puts the text on it */
   const solForPoints=result?.spatial?sceneTracks[result.spatial]:null;
-  const subjectAtRef=React.useRef<(u:number,v:number)=>boolean>(()=>false);
   /* the targets sit on things that stay put: a landmark that falls on a detected person is left out */
   const trackPts=React.useMemo(()=>picking&&footageVisible&&solForPoints?projectedTrackPoints(solForPoints,sceneTime,1,1,30).filter((p:{x:number;y:number})=>!subjectAtRef.current(p.x,p.y)).slice(0,14):[],[picking,footageVisible,solForPoints,sceneTime]); // eslint-disable-line react-hooks/exhaustive-deps
   const toStageXY=(p:{x:number;y:number})=>[rect.x+p.x*rect.w,rect.y+p.y*rect.h] as [number,number];
@@ -289,7 +292,9 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     placedAt.current=next;setDepthPct(0);setPick(next);setPicking(false);setSelIds([]);setHoverAt(null);setAmbiguous(false);setOnSubject(false);return true;
   };
   /* with a solved camera the picture shows only the few diamonds and the hover target; the planar scan keeps its own surface hints */
-  const surfaceMarkers=solForPoints?[]:planeMarkers.length?planeMarkers:spotMarkers;
+  /* a guide is for a surface of the scene: one whose centre or most of whose corners fall on a person (the foreground outline) is dropped */
+  const guideOnSubject=(m:{x:number;y:number;quad?:[number,number][];plane?:[number,number][]})=>{if(!rect.w||!rect.h)return false;const at=(x:number,y:number)=>subjectAtRef.current((x-rect.x)/rect.w,(y-rect.y)/rect.h);if(at(m.x,m.y))return true;const q=m.plane??m.quad;return !!q&&q.filter(p=>at(p[0],p[1])).length>=2;};
+  const surfaceMarkers=(solForPoints?[]:planeMarkers.length?planeMarkers:spotMarkers).filter((m:any)=>!guideOnSubject(m)).slice(0,12); /* more candidates than shown: people are the most textured thing in most shots, and the ones on them are dropped */
   /* Cancel stops what is on screen at once (the ripple, the timeline's sweep, the progress), not when the scan's current
      step next looks at its signal */
   const cancelScan = () => { abort.current?.abort(); abort.current = null; setProgress(null); setSeen(null); notify('Scan cancelled.'); };

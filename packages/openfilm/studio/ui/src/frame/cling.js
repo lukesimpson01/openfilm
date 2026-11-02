@@ -45,11 +45,15 @@ export function clingTarget(gray, w, h, x, y, { reach = 8, sizes = [16, 26, 40, 
  * Places worth pointing at on a frame: the best well-separated corners and markings (diamonds the person can click).
  * gray: the frame (Uint8, w*h); content: the picture inside letterbox bars, in 0..1. Returns [{ x, y, score }] in px.
  */
-export function suggestSpots(gray, w, h, { count = 8, content = { x: 0, y: 0, w: 1, h: 1 }, separation = 0.2 } = {}) {
+/** avoid(u, v) (0…1 of the frame): spots it rejects (a person in front) never take a slot from the scene behind; minScore lowers
+ * the bar for scenes whose only background is plain (a ceiling, a sky with clouds)
+ * @param {ArrayLike<number>} gray @param {number} w @param {number} h
+ * @param {{ count?: number, content?: { x: number, y: number, w: number, h: number }, separation?: number, avoid?: ((u: number, v: number) => boolean) | null, minScore?: number }} [options] */
+export function suggestSpots(gray, w, h, { count = 8, content = { x: 0, y: 0, w: 1, h: 1 }, separation = 0.2, avoid = null, minScore = GOOD } = {}) {
   const score = cornerScores(gray, w, h), size = Math.max(14, Math.round(w / 9)), step = Math.max(3, Math.round(w / 45));
   const x0 = Math.max(size, content.x * w + 0.05 * w), x1 = Math.min(w - size, (content.x + content.w) * w - 0.05 * w), y0 = Math.max(size, content.y * h + 0.05 * h), y1 = Math.min(h - size, (content.y + content.h) * h - 0.05 * h);
   const cands = [];
-  for (let y = y0; y <= y1; y += step) for (let x = x0; x <= x1; x += step) { const s = score(x, y, size); if (s >= GOOD) cands.push({ x, y, score: s }); }
+  for (let y = y0; y <= y1; y += step) for (let x = x0; x <= x1; x += step) { const s = score(x, y, size); if (s >= minScore && !avoid?.(x / w, y / h)) cands.push({ x, y, score: s }); }
   cands.sort((a, b) => b.score - a.score);
   const out = [];
   for (const c of cands) { if (out.length >= count) break; if (out.every((o) => Math.hypot(o.x - c.x, o.y - c.y) > separation * w)) out.push(c); }
