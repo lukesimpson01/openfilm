@@ -321,8 +321,11 @@ async function glance(c, want) {
     justLoaded = true;
   }
   follow(c);
-  if (!justLoaded && !v.seeking && Math.abs(v.currentTime - want) < SAME_TIME && v.readyState >= 2) return;
-  v.currentTime = want;
+  /* loaded before it was first asked for (behind the picture, after an edit reloaded the film): it is at want already
+     but has never put a frame on screen, so the same time is sought again, half a millisecond on (the same frame) */
+  const unpainted = c.following && c.presented == null;
+  if (!justLoaded && !unpainted && !v.seeking && Math.abs(v.currentTime - want) < SAME_TIME && v.readyState >= 2) return;
+  v.currentTime = unpainted && Math.abs(v.currentTime - want) < SAME_TIME ? want + 0.0005 : want;
   await sought(v);
   void onScreen(c, want);
 }

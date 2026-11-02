@@ -49,6 +49,23 @@ def track(config):
                 if len(fresh):reference=np.r_[reference,cv2.perspectiveTransform(fresh,np.linalg.inv(H))[:,0]];points=np.r_[points,fresh]
         errors.append(residual);ratios.append(float(inliers.mean()));observations.append({'t':row['sourceTimeUs']/1e6,'H':H.ravel().tolist(),'inliers':int(inliers.sum()),'points':len(src),'err':residual,'method':'native-lk-ransac'})
         progress('Tracking the selected surface',.15+.83*(i+1)/len(samples))
+    # Each verified frame is re-aligned straight to the reference patch (PlateTrack's ECC refine-to-reference): the chained
+    # LK matrices are good to a few pixels, the direct alignment to a fraction of one. A refinement is used only when the
+    # patch agrees strongly and stays within a few pixels of the chained answer; otherwise the chained matrix stands.
+    refined_count=0
+    try:
+        from platetrack.refine import ecc_refine_to_reference
+        ref_gray=cv2.imread(str(output/'frames'/samples[0]['name']),0);q64=quad.astype(np.float64)
+        for i,(row,obs) in enumerate(zip(samples,observations)):
+            if i==0 or obs.get('lost'):continue
+            cur=cv2.imread(str(output/'frames'/row['name']),0);Hc=np.linalg.inv(np.array(obs['H']).reshape(3,3))
+            Hr,cc=ecc_refine_to_reference(ref_gray,cur,Hc,q64,'homography')
+            if cc is None or cc<.9:continue  # a strongly agreeing patch may correct chained drift of any size; a merely good one only a small one
+            Hf=np.linalg.inv(Hr);Hf=Hf/Hf[2,2]
+            shift=np.linalg.norm(cv2.perspectiveTransform(q64[None],Hf)[0]-cv2.perspectiveTransform(q64[None],np.array(obs['H']).reshape(3,3))[0],axis=1).mean()
+            if not np.isfinite(shift) or (cc<.94 and shift>4) or shift>60 or not valid_quad(Hf,quad):continue
+            obs['H']=Hf.ravel().tolist();obs['method']='native-lk-ransac+ecc';obs['ecc']=round(cc,4);refined_count+=1
+    except Exception:pass
     lost=sum(bool(f.get('lost')) for f in observations)/len(observations)
     return {'version':1,'w':w,'h':h,'mode':'planar','plane':quad.tolist(),'model':'homography','frames':observations,'refPoints':initial.tolist(),'cuts':[r['sourceTimeUs']/1e6 for i,r in enumerate(samples) if i and r['shot']!=samples[i-1]['shot']],'quality':'Good' if lost<.05 else 'Fair' if lost<.2 else 'Poor','medianError':float(np.median(errors)) if errors else None,'inlierShare':float(np.mean(ratios)) if ratios else 0,'lostShare':lost,'elapsedMs':round((time.monotonic()-start)*1000),'peakRSSBytes':peak_rss(),'sourceHash':config.get('sourceHash')}
 if __name__=='__main__':

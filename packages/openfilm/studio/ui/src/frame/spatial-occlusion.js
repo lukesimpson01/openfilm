@@ -10,7 +10,7 @@ float spatialDepthVisibility(vec3 packed,float elementZ,float range){
 float spatialVisibility(vec2 source,float elementZ){
  if(source.x<uContent.x||source.y<uContent.y||source.x>uContent.x+uContent.z||source.y>uContent.y+uContent.w)return 0.;
  float geometry=1.;if(uHasGeometry>.5)geometry=spatialDepthVisibility(texture2D(uGeometryDepth,vec2(source.x,1.-source.y)).rgb,elementZ,100.);
- float foreground=uHasForeground>.5?texture2D(uForegroundMask,source).r:0.,target=uHasTarget>.5?texture2D(uInstanceMask,source).r:foreground;
+ float foreground=uHasForeground>.5?smoothstep(.3,.7,texture2D(uForegroundMask,source).r):0.,target=uHasTarget>.5?smoothstep(.3,.7,texture2D(uInstanceMask,source).r):foreground;
  float visibility=1.;if(uHasSceneDepth>.5)visibility=mix(1.,spatialDepthVisibility(texture2D(uSceneDepth,source).rgb,elementZ,uDepthRange),foreground);
  if(uOrdering>.5&&uOrdering<1.5)visibility=mix(visibility,1.,target);
  else if(uOrdering>1.5&&uOrdering<2.5)visibility=mix(visibility,0.,target);

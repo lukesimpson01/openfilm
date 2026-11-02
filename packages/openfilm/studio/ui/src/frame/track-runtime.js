@@ -236,6 +236,18 @@ export function createTracked(layer, root, options = {}) {
     return {...frame,targetSpecific:settings.target&&settings.target!=='all',unionTexture:union,maskTexture:mask,depthTexture:depth};
   }
 
+  /* The scan's own foreground matte, used for text placed in the scene when no precise masks were made. The matte lives in
+     an atlas of small tiles; the tile for this moment is copied out so the occlusion shader can sample it as one mask. */
+  let tileCanvas=null,tileTexture=null;
+  function lightFrame(m){
+    const img=m.tex.image,tw=Math.max(1,Math.round(img.width*m.rect.z)),th=Math.max(1,Math.round(img.height*m.rect.w));
+    if(!tileCanvas||tileCanvas.width!==tw||tileCanvas.height!==th){tileCanvas=document.createElement('canvas');tileCanvas.width=tw;tileCanvas.height=th;tileTexture?.dispose();tileTexture=new THREE.CanvasTexture(tileCanvas);tileTexture.minFilter=THREE.LinearFilter;tileTexture.magFilter=THREE.LinearFilter;tileTexture.generateMipmaps=false;tileTexture.colorSpace=THREE.NoColorSpace;tileTexture.flipY=false;}
+    tileCanvas.getContext('2d').drawImage(img,Math.round(img.width*m.rect.x),Math.round(img.height*m.rect.y),tw,th,0,0,tw,th);tileTexture.needsUpdate=true;
+    return {light:true,targetSpecific:false,unionTexture:tileTexture,maskTexture:tileTexture,depthTexture:null};
+  }
+  /* "Auto" needs a depth for the subject. Without one, text on a wall goes behind whoever stands in the picture: a person or car
+     in the shot is almost always nearer the camera than the wall behind them. The person can still choose "in front". */
+  const occlusionSettings=(t,anchor)=>{const s=depthSettings(t);return nativeFrame?.light&&s.mode==='auto'&&anchor?.type==='surface'?{...s,mode:'behind'}:s;};
   function setCalibratedCamera(camera,pose,Rv){return setSpatialCamera(camera,spatial,pose,[Rv.x,Rv.y,Rv.z,Rv.w]);}
   function prepareGeometryDepth(time){geometryDepth=null;const pose=spatialPoseAt(spatial,Math.round(time*1e6)),mesh=pose&&geometryMeshes.get(pose.shotId);if(!mesh)return;const k=Math.min(1,720/Math.max(spatial.width,spatial.height));geometryTarget??=new THREE.WebGLRenderTarget(Math.round(spatial.width*k),Math.round(spatial.height*k),{minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter,depthBuffer:true});geometryScene.clear();geometryScene.add(mesh);mesh.material.uniforms.lens.value=pose.distortion?.[0]??0;mesh.material.uniforms.principal.value.set(2*pose.intrinsics[0][2]/spatial.width-1,1-2*pose.intrinsics[1][2]/spatial.height);setCalibratedCamera(geometryCamera,pose,new THREE.Vector4(0,0,1,1));renderer.setRenderTarget(geometryTarget);renderer.clear();renderer.render(geometryScene,geometryCamera);renderer.setRenderTarget(null);geometryDepth=geometryTarget.texture;}
   const srcTime = (t) => (main?.still ? 0 : (src.at ?? 0) + t * (src.speed ?? 1));
@@ -260,7 +272,7 @@ export function createTracked(layer, root, options = {}) {
       if (other) jobs.push(seek(other.v, (layer.revealAt ?? 0) + tt));
       if (frozen) jobs.push(seek(frozen.v, srcTime(Math.min(tt, layer.freezeAt ?? 0.5))));
       echoes.forEach((e, k) => jobs.push(seek(e.v, srcTime(Math.max(0, tt - (k + 1) * (layer.echoGap ?? 0.08))))));
-      await Promise.all(jobs);if(disposed||epoch!==frameEpoch)return;nativeFrame=await nativeJob;
+      await Promise.all(jobs);if(disposed||epoch!==frameEpoch)return;nativeFrame=await nativeJob;if(!nativeFrame&&spatial&&matte?.tex?.image)nativeFrame=lightFrame(matte);
       const R = rect(); const [pw, ph] = proxy();prepareGeometryDepth(x);
       const H = track ? transformAt(track, x) : [1, 0, 0, 0, 1, 0, 0, 0, 1]; const Hinv = inv3(H) ?? [1, 0, 0, 0, 1, 0, 0, 0, 1];
       const m = matte;
@@ -313,7 +325,7 @@ export function createTracked(layer, root, options = {}) {
           const pose=spatialPoseAt(spatial,Math.round(x*1e6)),height=(it.worldHeight??.25)*A.s;
           const base=liveAnchor,spatialAnchor={...base,offset:[(base.offset?.[0]??0)+((it.letterOff??0)*(it.spacing??1)+A.dx)*height,(base.offset?.[1]??0)-A.dy*height,(base.offset?.[2]??0)],rotation:[...(base.rotation??[0,0,0])]};spatialAnchor.rotation[2]+=A.rz;
           const cameraPlane=anchorCameraPlane(spatialAnchor,height*o.aspect,height,pose,st);if(!cameraPlane)return;
-          const u=o.mesh.material.uniforms;if(it.video)u.uTex.value.needsUpdate=true;u.uSpatial.value=1;u.uK.value.set(pose.intrinsics[0][0],pose.intrinsics[1][1],pose.intrinsics[0][2],pose.intrinsics[1][2]);u.uLens.value=pose.distortion?.[0]??0;u.uSpatialSize.value.set(spatial.width,spatial.height);u.uPlaneOrigin.value.set(...cameraPlane.origin);u.uPlaneRight.value.set(...cameraPlane.right);u.uPlaneDown.value.set(...cameraPlane.down);u.uRect.value.copy(R);u.uProxy.value.set(pw,ph);u.uHinv.value.identity();u.uUsePlane.value=0;u.uPlaneInverse.value.identity();u.uAnchor.value.set(.5,.5);u.uSize.value.set(1,1);u.uRot.value=0;bindOcclusion(u,{geometry:geometryDepth,frame:nativeFrame,settings:depthSettings(tt),range:nativeOcclusion?.depthRange??100,content:spatial.content??layer.analysis?.content});u.uOpacity.value=(it.opacity??1)*(st?.o??1)*A.o;u.uWipe.value=A.wipe;draw(o.mesh);return;
+          const u=o.mesh.material.uniforms;if(it.video)u.uTex.value.needsUpdate=true;u.uSpatial.value=1;u.uK.value.set(pose.intrinsics[0][0],pose.intrinsics[1][1],pose.intrinsics[0][2],pose.intrinsics[1][2]);u.uLens.value=pose.distortion?.[0]??0;u.uSpatialSize.value.set(spatial.width,spatial.height);u.uPlaneOrigin.value.set(...cameraPlane.origin);u.uPlaneRight.value.set(...cameraPlane.right);u.uPlaneDown.value.set(...cameraPlane.down);u.uRect.value.copy(R);u.uProxy.value.set(pw,ph);u.uHinv.value.identity();u.uUsePlane.value=0;u.uPlaneInverse.value.identity();u.uAnchor.value.set(.5,.5);u.uSize.value.set(1,1);u.uRot.value=0;bindOcclusion(u,{geometry:geometryDepth,frame:nativeFrame,settings:occlusionSettings(tt,liveAnchor),range:nativeOcclusion?.depthRange??100,content:spatial.content??layer.analysis?.content});u.uOpacity.value=(it.opacity??1)*(st?.o??1)*A.o;u.uWipe.value=A.wipe;draw(o.mesh);return;
         }
         const opacity = (it.opacity ?? 1) * (st?.o ?? 1) * A.o*pinVisibilityAt(measured,x)*projectionVisibility(H,anchor);
         if (opacity <= 0.001||it.planeQuad&&!validPlaneProjection(H,it.planeQuad)) return;

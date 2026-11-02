@@ -1,0 +1,5 @@
+PlateTrack core (features, lk, models, refine, tracker, types)
+Source: https://github.com/edgarciavfx/comfyui-platetrack @ e6b44d5822defae799e45334ca22e7d53e5abef9
+Declared licence: MIT (pyproject.toml `license = { text = "MIT" }`). The repository ships no LICENSE file; before
+redistributing a Clyra build, ask the author for one or keep this notice with the files.
+Only the OpenCV tracking core is vendored (no ComfyUI nodes, no Cutie/MediaPipe code). Unmodified.

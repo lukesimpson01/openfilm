@@ -15,7 +15,6 @@ import{sceneAnchor,relativeAnchor}from'./spatial-scene.js';
 import{ModelActions}from'./ModelActions';
 import{inspectModel}from'./models';
 import type{DeviceObject}from'./devices';
-import{SpatialPreview}from'./SpatialPreview';
 import{SpatialControls}from'./SpatialControls';
 import{editSpatialPose}from'./spatial-motion.js';
 import{motionAt}from'./motion3d.js';
@@ -24,7 +23,7 @@ import{anchorQuad}from'./spatial-geometry.js';
 import{anchorFrame}from'./spatial-geometry.js';
 import {SpatialGizmo}from'./SpatialGizmo';
 import {spatialItem}from'./spatial-items.js';
-import {spatialPoseAt,projectWorld,cameraRay,rayPlane,objectAnchorAt,worldAnchor,manualPlaneAnchor,anchorFromGeometry}from'./spatial-geometry.js';
+import {spatialPoseAt,projectWorld,cameraRay,rayPlane,objectAnchorAt,worldAnchor,manualPlaneAnchor}from'./spatial-geometry.js';
 import { useSceneTracks } from './useSceneTracks';
 import { footageRect, placedPoint, referencePoint, fitItem, clamp,surfaceDepthMatrix } from './track-space.js';
 
@@ -114,7 +113,7 @@ export function TrackInspector({ layer, t, film, folder, projectId, commit, segm
         </section></details>
       ) : null}
 
-      {solution&&<details><summary className="cursor-pointer text-[11.5px] font-medium text-[var(--text-muted)]">Inspect the scene</summary><div className="mt-2"><SpatialPreview projectId={projectId} folder={folder} solution={solution} time={x} sourceRect={R} items={items} tracks={sceneTracks} localTime={t} onMode={mode=>{if(mode==='inspect')setPlacing(null);}} onPoint={(sx,sy)=>{const index=gizmo??0,it=items[index];if(!it)return;const next=spatialItem({...it,spatialAnchor:undefined},solution,x,pw,ph,[clamp((sx-R.x)/R.w)*solution.width,clamp((sy-R.y)/R.h)*solution.height]);if(!next.spatialAnchor){setScanError('No reliable surface at this point. Choose another point or define a plane.');return;}setScanError('');setItem(index,next);}} onWorldPoint={(position,normal)=>{try{setItem(gizmo??0,{spatialAnchor:anchorFromGeometry(solution,Math.round(x*1e6),position,normal),spatialWarning:undefined});}catch(e){setScanError((e as Error).message);}}}/></div></details>}
+
       <details><summary className="cursor-pointer text-[11.5px] font-medium text-[var(--text-muted)]">Other effects{mode!=='textBehind'?` · ${EFFECT_MODES[mode]}`:''}</summary><label className={`${row} mt-2`}><span className="w-[84px] shrink-0">Effect</span>
         <select value={mode} onChange={(e) => commit({ ...layer, mode: e.target.value }, 0)} className={`${T.small} flex-1`}>{Object.entries(EFFECT_MODES).map(([id, n]) => <option key={id} value={id} disabled={id !== 'textBehind' && !layer.matte}>{n}{id !== 'textBehind' && !layer.matte ? ' (needs a subject mask)' : ''}</option>)}</select></label></details>
 

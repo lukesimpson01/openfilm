@@ -1,4 +1,4 @@
-import {spatialSurfaceMarkers}from'./spatial-guides.js';
+import {spatialSurfaceMarkers,reconstructedSurfaceMarkers}from'./spatial-guides.js';
 import React from 'react';
 import { Smartphone, Laptop, Video, Crosshair, ScanLine, Sparkles, Plus, ChevronDown, Snowflake, Image as ImageIcon, Box } from 'lucide-react';
 import type { Film, Op } from '@/api';
@@ -20,9 +20,11 @@ import { StageOverlay, ScanOverlay, ScanProgress } from './StageOverlay';
 import { ForegroundOutline } from './ForegroundOutline';
 import { sceneItem, visibleSurfaceMarkers, referenceInScene, pointInside } from './scene-geometry.js';
 import{SpatialPlacementPreview}from'./SpatialPlacementPreview';
-import{SpatialPreview}from'./SpatialPreview';
-import{anchorFrame,anchorFromGeometry,spatialPoseAt,projectWorld,worldAnchor,surfaceAnchor,cameraRay}from'./spatial-geometry.js';
+import{anchorFrame,spatialPoseAt,projectWorld,worldAnchor,surfaceAnchor,cameraRay}from'./spatial-geometry.js';
 import { spatialItem } from './spatial-items.js';
+import { refineSurfaceAnchor } from './spatial-refine.js';
+import { refineTrackNative } from './spatial-analysis';
+import { projectedTrackPoints, nearestTriangle, anchorFromPoints, targetQuad, targetRing } from './track-points.js';
 import { useSceneTracks } from './useSceneTracks';
 import { apply,transformAt } from './track-core.js';
 import { T, seg, segWrap } from './ui';
@@ -171,13 +173,31 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   },[tool,cacheKey,folder,!!size,!!result,!!progress]); // eslint-disable-line react-hooks/exhaustive-deps
   const sceneTracks=useSceneTracks(folder,[result?.spatial,result?.track,...(result?.planes??[]).map(p=>p.track)]);
   const sceneTime=f?(f.clip.time?.[0]??0)+Math.max(0,at-f.start)*(f.clip.speed??1):0;
-  const [stick,setStick]=React.useState(true);
+  const [stick,setStick]=React.useState(true),[customPoint,setCustomPoint]=React.useState(false),[selIds,setSelIds]=React.useState<string[]>([]),[hoverAt,setHoverAt]=React.useState<[number,number]|null>(null);
+  /* How far the text sits off its surface, as a share of its distance from the camera: + toward the camera (in front of the wall), − into the scene. Reset puts the placement back as it was first found. */
+  const [depthPct,setDepthPct]=React.useState(0),placedAt=React.useRef<typeof pick>(null);
+  const depthOff=(position:number[],pose:any)=>{const q=projectWorld(position,pose);return q?depthPct/100*q.depth:0;};
   /* "Stick to surface" keeps the wall's tilt; "Float" turns the same point into an upright, camera-facing world anchor at its depth */
   const anchorFor=(p:any)=>{if(!p?.spatialAnchor||!result?.spatial||stick||p.spatialAnchor.type!=='surface')return p?.spatialAnchor;try{const sol=sceneTracks[result.spatial],t=p.time??sceneTime,pose=spatialPoseAt(sol,Math.round(t*1e6)),q=projectWorld(p.spatialAnchor.position,pose);return q?worldAnchor(sol,Math.round(t*1e6),[(p.currentX??.5)*sol.width,(p.currentY??.5)*sol.height],q.depth):p.spatialAnchor;}catch{return p.spatialAnchor;}};
   const sceneH=result?.track&&sceneTracks[result.track]?transformAt(sceneTracks[result.track],sceneTime):[1,0,0,0,1,0,0,0,1];
   /* the scan's frames feed two things: diamonds on trackable spots, and finding the surface under a click */
   const [scan,setScan]=React.useState<ScanFrames|null>(null);
   React.useEffect(()=>{setScan(null);if(tool!=='track'||!f||!result||isPhoto)return;const ctl=new AbortController();void readScanFrames({folder,src:f.clip.src,result,signal:ctl.signal}).then(v=>{if(!ctl.signal.aborted)setScan(v);}).catch(()=>{});return()=>ctl.abort();},[tool,result?.id,f?.clip.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* A surface pin starts from the plane the reconstruction fitted. Once the scan's frames are in, the footage itself checks that plane: it is tilted and moved only if the wall then lines up across the clip, on frames it was not fitted to. */
+  const [aligned,setAligned]=React.useState<'working'|'done'|'kept'|null>(null);
+  React.useEffect(()=>{
+    const a=pick?.spatialAnchor;if(!pick||!a||a.type!=='surface'||a.refineTried||a.manual||!scan||!result?.spatial||!sceneTracks[result.spatial]){setAligned(null);return;}
+    const target=pick,sol=sceneTracks[result.spatial];setAligned('working');
+    const timer=window.setTimeout(()=>{
+      let next=target;let outcome:'done'|'kept'='kept';
+      try{
+        const t=Math.round((target.time??sceneTime)*1e6),frames=scan.times.map((tt,i)=>({timeUs:Math.round(tt*1e6),gray:scan.grays[i],w:scan.w,h:scan.h})),r=refineSurfaceAnchor(a,sol,frames,[(target.currentX??.5)*sol.width,(target.currentY??.5)*sol.height],t);
+        if(r.improved){next={...target,spatialAnchor:{...r.anchor,refineTried:true}};outcome='done';}else next={...target,spatialAnchor:{...a,refineTried:true}};
+      }catch{next={...target,spatialAnchor:{...a,refineTried:true}};}
+      setPick(q=>q===target?next:q);setAligned(outcome);
+    },30);
+    return()=>window.clearTimeout(timer);
+  },[pick,scan,result?.spatial,sceneTracks]); // eslint-disable-line react-hooks/exhaustive-deps
   const spots=React.useMemo(()=>scan?suggestSpots(scan.grays[0],scan.w,scan.h,{content:result?.content}):[],[scan,result?.content]); // eslint-disable-line react-hooks/exhaustive-deps
   /* which way the surface under each diamond faces, found in the background once the frames are in: each diamond then
      shows the plane text would take there, and a click on one starts from it */
@@ -243,7 +263,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   },[tool,f?.clip.id,result,progress,footageVisible]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(()=>{
     if(tool!=='track'||!picking||!footageVisible||result?.spatial&&!sceneTracks[result.spatial])return;
-    document.body.dataset.sceneSelection='';
+    document.body.dataset.sceneSelection='';window.dispatchEvent(new CustomEvent('frame-pause')); /* the picture holds still while a spot is chosen */
     const cancel=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();setPicking(false);}};
     window.addEventListener('keydown',cancel);
     return()=>{delete document.body.dataset.sceneSelection;window.removeEventListener('keydown',cancel);};
@@ -252,9 +272,24 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     const toStage=(p:number[]):[number,number]=>[rect.x+p[0]/result.w*rect.w,rect.y+p[1]/result.h*rect.h];
     const plane=fc?.tilted&&fc.normal?(orientedQuad(q,fc.normal,intrinsics(result.w,result.h),{width:.15}) as number[][]).map(toStage):[[x-r*1.6,y-r],[x+r*1.6,y-r],[x+r*1.6,y+r],[x-r*1.6,y+r]] as [number,number][];
     return [{id:`spot-${i}`,title:fc?.tilted?'Text lies on this surface':'Follow this',x,y,quad:[[x,y-r],[x+r,y],[x,y+r],[x-r,y]] as [number,number][],plane}];}):[];
-  const planeMarkers=footageVisible&&result?(result.spatial&&sceneTracks[result.spatial]?spatialSurfaceMarkers(sceneTracks[result.spatial],result.scene,sceneTime,result.w,result.h):visibleSurfaceMarkers(result.scene,result.planes,sceneTracks,sceneTime,result.w,result.h,sceneH)).map((s:{id:string;title:string;point:number[];quad:number[][]})=>({id:s.id,title:s.title,x:rect.x+s.point[0]/result.w*rect.w,y:rect.y+s.point[1]/result.h*rect.h,quad:s.quad.map((p:number[])=>[rect.x+p[0]/result.w*rect.w,rect.y+p[1]/result.h*rect.h] as [number,number])})):[];
+  const planeMarkers=footageVisible&&result?(result.spatial&&sceneTracks[result.spatial]?(()=>{const described=spatialSurfaceMarkers(sceneTracks[result.spatial],result.scene,sceneTime,result.w,result.h);/* the planes are read from the reconstruction itself, so each is drawn at its true tilt; a scene description only fills in when nothing was reconstructed */const rebuilt=reconstructedSurfaceMarkers(sceneTracks[result.spatial],sceneTime,result.w,result.h);return rebuilt.length?rebuilt:described;})():visibleSurfaceMarkers(result.scene,result.planes,sceneTracks,sceneTime,result.w,result.h,sceneH)).map((s:{id:string;title:string;point:number[];quad:number[][];plane?:number[][]})=>({id:s.id,title:s.title,x:rect.x+s.point[0]/result.w*rect.w,y:rect.y+s.point[1]/result.h*rect.h,quad:s.quad.map((p:number[])=>[rect.x+p[0]/result.w*rect.w,rect.y+p[1]/result.h*rect.h] as [number,number]),...(s.plane?{plane:s.plane.map((p:number[])=>[rect.x+p[0]/result.w*rect.w,rect.y+p[1]/result.h*rect.h] as [number,number])}:{})})):[];
 
-  const surfaceMarkers=planeMarkers.length?planeMarkers:spotMarkers;
+  /* After-Effects-style targets: the solve's own landmarks sit on the paused picture, a hovered triangle of them shows its plane, a click (or a Shift-selection of several) puts the text on it */
+  const solForPoints=result?.spatial?sceneTracks[result.spatial]:null;
+  const subjectAtRef=React.useRef<(u:number,v:number)=>boolean>(()=>false);
+  /* the targets sit on things that stay put: a landmark that falls on a detected person is left out */
+  const trackPts=React.useMemo(()=>picking&&footageVisible&&solForPoints?projectedTrackPoints(solForPoints,sceneTime,1,1,30).filter((p:{x:number;y:number})=>!subjectAtRef.current(p.x,p.y)).slice(0,14):[],[picking,footageVisible,solForPoints,sceneTime]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toStageXY=(p:{x:number;y:number})=>[rect.x+p.x*rect.w,rect.y+p.y*rect.h] as [number,number];
+  const hoverTri=React.useMemo(()=>hoverAt&&trackPts.length?nearestTriangle(trackPts,(hoverAt[0]-rect.x)/rect.w,(hoverAt[1]-rect.y)/rect.h,.14):null,[hoverAt,trackPts,rect.x,rect.y,rect.w,rect.h]);
+  const hoverTarget=React.useMemo(()=>{const pts=selIds.length>=3?trackPts.filter(p=>selIds.includes(p.id)):hoverTri;if(!pts||pts.length<3||!solForPoints)return null;const a=anchorFromPoints(solForPoints,Math.round(sceneTime*1e6),pts);if(!a)return null;const q=targetQuad(solForPoints,sceneTime,a,1,1),rg=targetRing(solForPoints,sceneTime,a,1,1);const tri=(hoverTri??pts.slice(0,3)).map(toStageXY) as [number,number][];return {tri,plane:q?q.map(([x,y])=>toStageXY({x,y})):null,ring:rg?rg.map(([x,y])=>toStageXY({x,y})):null,ids:pts.map((p:{id:string})=>p.id)};},[hoverTri,selIds,trackPts,solForPoints,sceneTime,rect.x,rect.y,rect.w,rect.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  const placeOnPoints=(pts:{id:string;xyz:number[]}[])=>{
+    if(!solForPoints||!result)return false;const a=anchorFromPoints(solForPoints,Math.round(sceneTime*1e6),pts);if(!a)return false;
+    const pose=spatialPoseAt(solForPoints,Math.round(sceneTime*1e6)),q=pose&&projectWorld(a.position,pose);if(!q)return false;
+    const next={spatialAnchor:a,x:q.x/solForPoints.width,y:q.y/solForPoints.height,currentX:q.x/solForPoints.width,currentY:q.y/solForPoints.height,time:sceneTime};
+    placedAt.current=next;setDepthPct(0);setPick(next);setPicking(false);setSelIds([]);setHoverAt(null);setAmbiguous(false);setOnSubject(false);return true;
+  };
+  /* with a solved camera the picture shows only the few diamonds and the hover target; the planar scan keeps its own surface hints */
+  const surfaceMarkers=solForPoints?[]:planeMarkers.length?planeMarkers:spotMarkers;
   /* Cancel stops what is on screen at once (the ripple, the timeline's sweep, the progress), not when the scan's current
      step next looks at its signal */
   const cancelScan = () => { abort.current?.abort(); abort.current = null; setProgress(null); setSeen(null); notify('Scan cancelled.'); };
@@ -276,6 +311,11 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     const S = surface?.state === 'ready' && surface.for === pick && pick && mode === 'textBehind' ? (adjusted ?? surface.data)! : null;
     let sceneForItem = result.scene, planesForItem = result.planes;
     if (S && pick) {
+      /* the scan found this surface at a third of the footage's size: re-align every frame to the reference patch at full size */
+      try{
+        const clamp01=(v:number)=>Math.max(0,Math.min(1,v)),quad=S.quad.map(([x,y])=>[clamp01(x/result.w),clamp01(y/result.h)]),better=await refineTrackNative(projectId,folder,f!.clip.src.split('#')[0],result.from,result.to,S.result as any,quad);
+        if(better)S.result={...S.result,frames:better.frames,refinedFrames:better.refined} as any;
+      }catch{/* the scan's own track stands */}
       const name = 'Surface at click', path = await putFile(projectId, `assets/track/${result.id}-click-${Date.now().toString(36)}.json`, JSON.stringify(S.result));
       sceneForItem = { summary: result.scene?.summary ?? '', motion: result.scene?.motion ?? '', safePolygon: result.scene?.safePolygon ?? [], referenceTime: result.scene?.referenceTime ?? result.from, model: result.scene?.model ?? 'local', planes: [...(result.scene?.planes ?? []), { kind: 'surface', name, quad: S.quad.map(([x, y]) => [x / result.w, y / result.h] as [number, number]), confidence: .9 }] };
       planesForItem = [...(result.planes ?? []), { name, track: path, quality: S.result.quality, lostShare: S.result.lostShare }];
@@ -285,7 +325,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
     const items = mode === 'textBehind' ? [spatialItem(sceneItem({...fitItem(itemFor(template, text, anchor, result.h), C, result.w, result.h),anchor,sceneDepth,anim:'rise',in:.45,animOut:'fade',out:.3},sceneForItem,result.w,result.h,'auto',planesForItem),result.spatial?sceneTracks[result.spatial]:null,pick?.time??sceneTime,result.w,result.h,pick?.currentX!=null&&result.spatial&&sceneTracks[result.spatial]?[pick.currentX*sceneTracks[result.spatial].width,pick.currentY!*sceneTracks[result.spatial].height]:undefined)] : [];
     /* white words on a white wall cannot be read: over a light patch of the picture the text goes dark, with a light edge */
     if(scan&&items[0]&&mode==='textBehind'&&/^#f{3,6}$/i.test(String(items[0].color??''))){const k=Math.max(0,Math.min(scan.grays.length-1,Math.round(((pick?.time??sceneTime)-result.from)*result.fps))),g=scan.grays[k],[ax,ay]=anchor,r=Math.max(4,Math.round(result.w*.05));let sum=0,n=0;for(let y=Math.max(0,Math.round(ay-r));y<Math.min(scan.h,ay+r);y++)for(let x=Math.max(0,Math.round(ax-r*2));x<Math.min(scan.w,ax+r*2);x++){sum+=g[y*scan.w+x];n++;}if(n&&sum/n>170)Object.assign(items[0],{color:'#15171c',strokeColor:'rgba(255,255,255,0.6)'});}
-    if(pick?.spatialAnchor&&items[0]){const solution=sceneTracks[result.spatial!],a=anchorFor(pick),pose=spatialPoseAt(solution,Math.round((pick.time??sceneTime)*1e6)),p=projectWorld(a.position,pose);if(!p)throw Error('This point is behind the source camera. Choose a visible source frame.');Object.assign(items[0],{place:a.type==='surface'?'surface':'standing',spatialAnchor:{...a,depthOffset:(.5-sceneDepth)*2},worldHeight:(items[0].size/result.h)*solution.height/pose.intrinsics[1][1]*p.depth,spatialWarning:undefined});}
+    if(pick?.spatialAnchor&&items[0]){const solution=sceneTracks[result.spatial!],a=anchorFor(pick),pose=spatialPoseAt(solution,Math.round((pick.time??sceneTime)*1e6)),p=projectWorld(a.position,pose);if(!p)throw Error('This point is behind the source camera. Choose a visible source frame.');Object.assign(items[0],{place:a.type==='surface'?'surface':'standing',spatialAnchor:{...a,depthOffset:depthOff(a.position,pose)},worldHeight:(items[0].size/result.h)*solution.height/pose.intrinsics[1][1]*p.depth,spatialWarning:undefined});}
     if(result.spatial&&items[0]&&!items[0].spatialAnchor){setAmbiguous(true);throw Error('This point has no verified surface. Choose a floating depth or another surface.');}
     const name = mode !== 'textBehind' ? EFFECT_MODES[mode] : template === 'walkThrough' ? 'Walk Through Text' : template === 'giant' ? 'Walk Past Giant Title' : template === 'surface' ? 'Tracked text on surface' : template === 'floating' ? 'Text Above Ground' : template === 'location' ? 'Location Title' : '3D Text in Scene';
     /* a figure printed on the very surface the text goes on (a poster) must not cover it */
@@ -296,18 +336,19 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   });
   /* A click on something the scan found (a person, an object) is asked about once; a click near a diamond clings to it. */
   const subjectAt=(u:number,v:number)=>{const c=document.querySelector<HTMLCanvasElement>('[data-foreground-outline] canvas');if(!c||!c.width||!c.dataset.maskTimestamp)return false;try{const d=c.getContext('2d',{willReadFrequently:true})!.getImageData(Math.min(c.width-1,Math.floor(u*c.width)),Math.min(c.height-1,Math.floor(v*c.height)),1,1).data;return d[3]>0;}catch{return false;}};
+  subjectAtRef.current=subjectAt;
   const snap=(sx:number,sy:number):[number,number]=>{let best:[number,number]|null=null,d=rect.w*.022;for(const m of surfaceMarkers){const k=Math.hypot(m.x-sx,m.y-sy);if(k<d){d=k;best=[m.x,m.y];}}return best??[sx,sy];};
-  const toFootage = (sx: number, sy: number) => {const hit=subjectAt(clamp((sx-rect.x)/rect.w),clamp((sy-rect.y)/rect.h));setOnSubject(hit);setForeground(hit?'behind':'auto');const p=referenceInScene(result?.scene,result?.planes,sceneTracks,sceneTime,[clamp((sx-rect.x)/rect.w)*(result?.w??1),clamp((sy-rect.y)/rect.h)*(result?.h??1)],result?.w??1,result?.h??1,sceneH);let spatialAnchor;if(result?.spatial&&sceneTracks[result.spatial])try{{const sol=sceneTracks[result.spatial],us=Math.round(sceneTime*1e6),px:[number,number]=[clamp((sx-rect.x)/rect.w)*sol.width,clamp((sy-rect.y)/rect.h)*sol.height];spatialAnchor=surfaceAnchor(sol,us,px);
+  const toFootage = (sx: number, sy: number) => {const hit=subjectAt(clamp((sx-rect.x)/rect.w),clamp((sy-rect.y)/rect.h));setOnSubject(hit);setForeground(hit?'behind':'auto');const p=referenceInScene(result?.scene,result?.planes,sceneTracks,sceneTime,[clamp((sx-rect.x)/rect.w)*(result?.w??1),clamp((sy-rect.y)/rect.h)*(result?.h??1)],result?.w??1,result?.h??1,sceneH);let spatialAnchor;if(result?.spatial&&sceneTracks[result.spatial])try{{const sol=sceneTracks[result.spatial],us=Math.round(sceneTime*1e6),px:[number,number]=[clamp((sx-rect.x)/rect.w)*sol.width,clamp((sy-rect.y)/rect.h)*sol.height];if(customPoint)throw new Error('custom point');spatialAnchor=surfaceAnchor(sol,us,px);
   /* sparse points behind glass or across a street can fit a surface the camera sees edge-on (text on it would vanish): such a fit is not trusted, the text stands at that depth facing the camera instead */
   const pose=spatialPoseAt(sol,us),n=spatialAnchor?.normal,ray=pose&&cameraRay(px,pose).direction,facing=n&&ray?Math.abs(n[0]*ray[0]+n[1]*ray[1]+n[2]*ray[2]):1;
   if(pose&&facing<.3){const q=projectWorld(spatialAnchor.position,pose);spatialAnchor=q?{...worldAnchor(sol,us,px,q.depth),edgeOnSurface:true}:spatialAnchor;}
-  setAmbiguous(false);}}catch{try{const sol=sceneTracks[result.spatial],a=worldAnchor(sol,Math.round(sceneTime*1e6),[clamp((sx-rect.x)/rect.w)*sol.width,clamp((sy-rect.y)/rect.h)*sol.height],floatDistance);spatialAnchor={...a,manual:true,depthSource:'user'};}catch{}setAmbiguous(true);}return {spatialAnchor,x:clamp(p[0]/(result?.w??1)),y:clamp(p[1]/(result?.h??1)),currentX:clamp((sx-rect.x)/rect.w),currentY:clamp((sy-rect.y)/rect.h),time:sceneTime};};
+  setAmbiguous(false);}}catch{try{const sol=sceneTracks[result.spatial],us=Math.round(sceneTime*1e6),px:[number,number]=[clamp((sx-rect.x)/rect.w)*sol.width,clamp((sy-rect.y)/rect.h)*sol.height],pose=spatialPoseAt(sol,us);let depth=floatDistance;if(customPoint&&pose){/* a free point sits at the depth of the footage under the click: the nearest solved landmark in the picture */let near=Infinity;for(const pt of sol.shots.find((s:any)=>s.id===pose.shotId)?.points??[]){const q=projectWorld(pt.xyz,pose);if(q&&q.depth>0){const d=Math.hypot(q.x-px[0],q.y-px[1]);if(d<near){near=d;depth=q.depth;}}}}const a=worldAnchor(sol,us,px,depth);spatialAnchor={...a,manual:true,depthSource:customPoint?'scene':'user',custom:customPoint};}catch{}setAmbiguous(!customPoint);}return {spatialAnchor,x:clamp(p[0]/(result?.w??1)),y:clamp(p[1]/(result?.h??1)),currentX:clamp((sx-rect.x)/rect.w),currentY:clamp((sy-rect.y)/rect.h),time:sceneTime};};
   const fromFootage = (p: { x: number; y: number; spatialAnchor?:any }) => {
-    if(p.spatialAnchor&&result?.spatial){const solution=sceneTracks[result.spatial],pose=spatialPoseAt(solution,Math.round(sceneTime*1e6));if(!pose)return null;const q=projectWorld(anchorFrame({...p.spatialAnchor,depthOffset:(.5-sceneDepth)*2},null,pose).position,pose);return q?{x:rect.x+q.x/solution.width*rect.w,y:rect.y+q.y/solution.height*rect.h}:null;}
+    if(p.spatialAnchor&&result?.spatial){const solution=sceneTracks[result.spatial],pose=spatialPoseAt(solution,Math.round(sceneTime*1e6));if(!pose)return null;const q=projectWorld(anchorFrame({...p.spatialAnchor,depthOffset:depthOff(p.spatialAnchor.position,pose)},null,pose).position,pose);return q?{x:rect.x+q.x/solution.width*rect.w,y:rect.y+q.y/solution.height*rect.h}:null;}
     const item=sceneItem({anchor:[p.x*result!.w,p.y*result!.h]},result?.scene,result!.w,result!.h,'auto',result?.planes),H=item.track&&sceneTracks[item.track]?transformAt(sceneTracks[item.track],sceneTime):sceneH,q=apply(H,[p.x*result!.w,p.y*result!.h]);return { x: rect.x + q[0]/result!.w * rect.w, y: rect.y + q[1]/result!.h * rect.h };
   };
 
-  const placementPreview=React.useMemo(()=>{if(!result?.spatial||!pick?.spatialAnchor)return null;const solution=sceneTracks[result.spatial],a=anchorFor(pick),pose=spatialPoseAt(solution,Math.round((pick.time??sceneTime)*1e6)),p=projectWorld(a.position,pose);return p?{text,font:'Sora',weight:900,color:'#ffffff',place:'surface',anchor:[0,0],size:80,worldHeight:.14*solution.height/pose.intrinsics[1][1]*p.depth,spatialAnchor:{...a,depthOffset:(.5-sceneDepth)*2}}:null;},[pick,stick,text,result?.spatial,sceneTracks,sceneTime,sceneDepth]);
+  const placementPreview=React.useMemo(()=>{if(!result?.spatial||!pick?.spatialAnchor)return null;const solution=sceneTracks[result.spatial],a=anchorFor(pick),pose=spatialPoseAt(solution,Math.round((pick.time??sceneTime)*1e6)),p=projectWorld(a.position,pose);return p?{text,font:'Sora',weight:900,color:'#ffffff',place:'surface',anchor:[0,0],size:80,worldHeight:.14*solution.height/pose.intrinsics[1][1]*p.depth,spatialAnchor:{...a,depthOffset:depthOff(a.position,pose)}}:null;},[pick,stick,text,result?.spatial,sceneTracks,sceneTime,sceneDepth,depthPct]);
   const selectedPoint=pick&&result?fromFootage(pick):null;
 
   return (
@@ -363,7 +404,7 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
           </div>
           <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
             <span className="text-[12px] font-semibold text-[var(--text)]">Zoom & pan camera</span>
-            <button type="button" disabled={!f||isPhoto} onClick={()=>f&&requestUniversalTracking(f.clip.id)} className={T.secondary}><Crosshair size={13}/>Follow something in the video</button>
+            <button type="button" disabled={!f||isPhoto} onClick={()=>{if(!f)return;setPicking(false);setHoverAt(null);requestUniversalTracking(f.clip.id);}} className={T.secondary}><Crosshair size={13}/>Follow something in the video</button>
             <Sel label="Move" value={cam2d} options={Object.keys(CAMERA_PRESETS)} names={CAMERA_PRESETS as Record<string, string>} onChange={setCam2d} />
             <button type="button" disabled={busy} onClick={() => void addCam('2d')} className={T.secondary}><Plus size={13} />Add camera</button>
           </div>
@@ -391,6 +432,10 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
                   <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--text)]">{f.clip.src.split('#')[0].split('/').pop()}</span><span className="text-[10.5px] text-[var(--text-faint)]">{isPhoto ? 'photo' : 'from the playhead'}</span></div>
                 <p className={T.hint}>{progress?'Scanning camera motion, surfaces and people…':result?'Click a diamond to place text in the scene.':'Scanning starts automatically.'}</p>
                 
+                <div className="flex flex-col gap-1.5" role="group" aria-label="Motion track">
+                  <span className="text-[11px] font-medium text-[var(--text-dim)]">Motion track · text follows a moving target</span>
+                  <div className="grid grid-cols-3 gap-1.5">{([['face','Face'],['object','Object'],['point','Select anything']] as const).map(([k,label])=><button key={k} type="button" disabled={!f||isPhoto} onClick={()=>{if(!f)return;setPicking(false);setHoverAt(null);requestUniversalTracking(f.clip.id,k);}} className={`${T.tile} h-9 text-[11px]`}>{label}</button>)}</div>
+                </div>
                 {progress ? <ScanProgress share={progress.share} msg={progress.msg} seen={seen} onCancel={cancelScan} />
                   : <button type="button" disabled={!size} onClick={analyse} className={`${result?T.secondary:T.primary} h-9`}><ScanLine size={14} />{result ? 'Scan again' : isPhoto ? 'Scan photo' : 'Scan footage'}</button>}
                 {!progress && result ? <p className="text-[11px] text-[var(--text-muted)]">Camera motion <b className="font-semibold text-[var(--text)]">{result.quality}</b> · {result.medianError} px{result.occlusion ? ' · precise people masks' : result.matte ? ' · foreground ready' : ''}</p> : null}
@@ -405,13 +450,22 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
               {result ? (
                 <div className="flex flex-col gap-2" style={{ animation: 'mg-in .22s cubic-bezier(.22,1,.36,1) both' }}>
                   <p role="status" className="text-[12px] font-medium text-[var(--text)]">{result.spatial&&!sceneTracks[result.spatial]?'Preparing the scanned surfaces…':picking?'Click a diamond or a point on the video':pick?'Position selected':'Choose a position on the video'}</p>
+                  {result.spatial&&<div className={segWrap} role="group" aria-label="What a click places"><button type="button" aria-pressed={!customPoint} className={seg(!customPoint)} onClick={()=>setCustomPoint(false)}>On a surface</button><button type="button" aria-pressed={customPoint} className={seg(customPoint)} onClick={()=>setCustomPoint(true)}>Custom point</button></div>}
                   {!picking&&<button type="button" onClick={() => {if(!footageVisible&&f)window.dispatchEvent(new CustomEvent('frame-seek',{detail:f.start+.03}));setPicking(true);}} className={T.secondary}><Crosshair size={13} />{pick?'Choose another point':'Place text on the video'}</button>}
                   {ambiguous&&result?.spatial&&sceneTracks[result.spatial]&&<div className="flex flex-col gap-1.5 rounded-lg border border-[var(--border)] p-2.5"><p className={T.hint}>No flat surface here, so the text floats in the scene. Drag to set how far.</p><input aria-label="Float distance" type="range" min={.25} max={20} step={.05} value={floatDistance} onChange={e=>{const d=Number(e.target.value);setFloatDistance(d);try{const sol=sceneTracks[result.spatial!],time=pick?.time??sceneTime,a=worldAnchor(sol,Math.round(time*1e6),[(pick?.currentX??.5)*sol.width,(pick?.currentY??.76)*sol.height],d);setPick(q=>q&&{...q,spatialAnchor:{...a,manual:true,depthSource:'user'}});}catch(err){notify((err as Error).message);}}} className="min-w-0 accent-[var(--accent)]"/></div>}
           {placementPreview&&result?.spatial&&sceneTracks[result.spatial]&&<SpatialPlacementPreview projectId={projectId} folder={folder} solution={sceneTracks[result.spatial]} item={placementPreview} time={sceneTime} sourceRect={rect}/>}
-          {result?.spatial&&sceneTracks[result.spatial]&&<More title="Inspect the scene"><SpatialPreview projectId={projectId} folder={folder} solution={sceneTracks[result.spatial]} time={sceneTime} sourceRect={rect} onMode={mode=>{setPicking(mode!=='inspect'&&!pick);}} onPoint={(sx,sy)=>setPick(toFootage(sx,sy))} onWorldPoint={(point,normal)=>{try{const solution=sceneTracks[result.spatial!],anchor=anchorFromGeometry(solution,Math.round(sceneTime*1e6),point,normal);setPick({x:.5,y:.5,time:sceneTime,spatialAnchor:anchor});setAmbiguous(false);notify('Selected a reconstructed surface.');}catch(e){notify((e as Error).message);}}}/></More>}
+          
           {(result.matte||result.occlusion)&&footageVisible&&<ForegroundOutline folder={folder} occlusionPath={result.occlusion} mattePath={result.matte} time={sceneTime} sourceRect={rect}/>}
-          <StageOverlay pick={picking&&footageVisible&&(!result.spatial||!!sceneTracks[result.spatial])} showSurfaces={footageVisible&&!progress&&(!result.spatial||!!sceneTracks[result.spatial])} focus={footageVisible&&!progress?focusPlane:null} pickBounds={rect} surfaces={surfaceMarkers} hint="Choose a diamond or click a surface" onCancel={()=>setPicking(false)} onPick={(x0, y0) => {const [sx,sy]=snap(x0,y0),m=surfaceMarkers.find((mk:{id:string;x:number;y:number})=>mk.x===sx&&mk.y===sy);pickSpot.current=m?.id.startsWith('spot-')?Number(m.id.slice(5)):null;const next=toFootage(sx,sy);setPick(next);setPicking(false);}} nodes={selectedPoint&&!progress&&footageVisible ? [{ id: 'place', ...selectedPoint, label: '1', active: true }] : []} onDrop={(_, x0, y0) => {if(x0<rect.x||y0<rect.y||x0>rect.x+rect.w||y0>rect.y+rect.h)return;const [sx,sy]=snap(x0,y0),next=toFootage(sx,sy);setPick(next);setPicking(false);}} />
+          <StageOverlay trackPoints={trackPts.map((p:{id:string;x:number;y:number})=>{const [x,y]=toStageXY(p);return {id:p.id,x,y,selected:selIds.includes(p.id)};})} hoverTarget={hoverTarget} onHover={(x,y)=>setHoverAt([x,y])} pick={picking&&footageVisible&&(!result.spatial||!!sceneTracks[result.spatial])} showSurfaces={footageVisible&&!progress&&(!result.spatial||!!sceneTracks[result.spatial])} focus={footageVisible&&!progress?focusPlane:null} pickBounds={rect} surfaces={surfaceMarkers} hint={solForPoints?"Hover a point to see its surface · click to add text":"Choose a diamond or click a surface"} onCancel={()=>setPicking(false)} onPick={(x0, y0, shift) => {if(solForPoints&&trackPts.length){const fx=(x0-rect.x)/rect.w,fy=(y0-rect.y)/rect.h;if(shift){let best:typeof trackPts[number]|null=null,d=.035;for(const p of trackPts){const k=Math.hypot(p.x-fx,p.y-fy);if(k<d){d=k;best=p;}}if(best){const id=best.id;setSelIds(s=>s.includes(id)?s.filter(v=>v!==id):[...s,id]);}return;}const chosen=selIds.length>=3?trackPts.filter(p=>selIds.includes(p.id)):hoverTri;if(chosen&&chosen.length>=3&&placeOnPoints(chosen))return;}const [sx,sy]=snap(x0,y0),m=surfaceMarkers.find((mk:{id:string;x:number;y:number})=>mk.x===sx&&mk.y===sy);pickSpot.current=m?.id.startsWith('spot-')?Number(m.id.slice(5)):null;const next=toFootage(sx,sy);placedAt.current=next;setDepthPct(0);setPick(next);setPicking(false);}} nodes={selectedPoint&&!progress&&footageVisible ? [{ id: 'place', ...selectedPoint, label: '1', active: true }] : []} onDrop={(_, x0, y0) => {if(x0<rect.x||y0<rect.y||x0>rect.x+rect.w||y0>rect.y+rect.h)return;const [sx,sy]=snap(x0,y0),next=toFootage(sx,sy);setPick(next);setPicking(false);}} />
                   {pick&&<div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3" style={{ animation: 'mg-in .22s cubic-bezier(.22,1,.36,1) both' }}>
+                    {result.spatial&&pick.spatialAnchor&&<div className="flex flex-col gap-1" data-depth-control>
+                      <div className="flex items-center justify-between text-[11px] text-[var(--text-dim)]"><span className="font-medium text-[var(--text)]">Depth</span><span>{depthPct===0?'On the surface':depthPct>0?'In front':'Behind'}</span></div>
+                      <input aria-label="Depth" type="range" min={-60} max={90} step={1} value={depthPct} onChange={e=>setDepthPct(Number(e.target.value))} onDoubleClick={()=>setDepthPct(0)} className="min-w-0 accent-[var(--accent)]"/>
+                      <div className="flex items-center justify-between text-[10.5px] text-[var(--text-muted)]"><span>Into the scene</span><span>Toward you</span></div>
+                      {aligned==='working'&&<p className={T.hint} role="status">Checking the wall against the footage…</p>}
+                      {aligned==='done'&&<p className={T.hint} role="status">Fine-tuned to the wall across the clip.</p>}
+                      {(depthPct!==0||(placedAt.current&&placedAt.current!==pick))&&<button type="button" onClick={()=>{setDepthPct(0);if(placedAt.current){const back=placedAt.current.spatialAnchor?{...placedAt.current,spatialAnchor:{...placedAt.current.spatialAnchor,refineTried:true}}:placedAt.current;placedAt.current=back;setPick(back);}}} className="self-start text-[11px] font-medium text-[var(--accent)]">Reset to default</button>}
+                    </div>}
                     <input aria-label="Text" placeholder="Your text" value={text} onChange={(e) => setText(e.target.value)} className={`${T.small} w-full`} />
                     {pick.spatialAnchor?.edgeOnSurface&&<p className={T.hint}>The surface here is seen almost edge-on, so the text stands at its depth facing the camera.</p>}
                     {pick.spatialAnchor?.type==='surface'&&<div className={segWrap} role="group" aria-label="How the text sits"><button type="button" aria-pressed={stick} className={seg(stick)} onClick={()=>setStick(true)}>Stick to surface</button><button type="button" aria-pressed={!stick} className={seg(!stick)} onClick={()=>setStick(false)}>Float, face me</button></div>}

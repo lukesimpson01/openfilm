@@ -281,7 +281,8 @@ export function createUniversalTracker(selection, sourceW, sourceH) {
     rotation = 0,
     scale = 1,
     candidates = [],
-    lastPacket = null;
+    lastPacket = null,
+    flowRun = 0;
   const target = structuredClone(selection),
     referenceAnchor = [target.anchorX, target.anchorY];
   function initialize(packet) {
@@ -302,19 +303,30 @@ export function createUniversalTracker(selection, sourceW, sourceH) {
     seed();
     return observation(packet, 1, "observed", "reference");
   }
-  function seed() {
+  function seed(keep = null) {
     if (!previous || !prevPyramid) return;
     const sx = previous.w / sourceW,
       sy = previous.h / sourceH,
       r = target.region,
       w = r.width * scale,
-      h = r.height * scale;
-    featurePoints = corners(prevPyramid, 24, 4, null, [
-      (last.x - w / 2) * sx,
-      (last.y - h / 2) * sy,
-      (last.x + w / 2) * sx,
-      (last.y + h / 2) * sy,
-    ]);
+      h = r.height * scale,
+      box = [
+        (last.x - w / 2) * sx,
+        (last.y - h / 2) * sy,
+        (last.x + w / 2) * sx,
+        (last.y + h / 2) * sy,
+      ],
+      inside = (p) => p[0] >= box[0] && p[1] >= box[1] && p[0] <= box[2] && p[1] <= box[3],
+      kept = (keep ?? []).filter(inside);
+    /* points that kept agreeing stay; fresh corners only top the cloud up */
+    if (kept.length >= 32) {
+      featurePoints = kept;
+      return;
+    }
+    const fresh = corners(prevPyramid, 48, 3, null, box).filter((p) =>
+      kept.every((q) => Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) > 2),
+    );
+    featurePoints = [...kept, ...fresh].slice(0, 64);
   }
   function prediction(timeUs) {
     const dt = Math.min(0.2, Math.abs(timeUs - last.sourceTimeUs) / 1e6);
@@ -397,13 +409,14 @@ export function createUniversalTracker(selection, sourceW, sourceH) {
           : pyramid(packet.global.data, packet.global.w, packet.global.h),
       sx = (packet.global?.w ?? 1) / sourceW,
       sy = (packet.global?.h ?? 1) / sourceH;
-    let flow = null;
+    let flow = null,
+      carried = null;
     if (
       prevPyramid &&
       featurePoints.length >= 4 &&
       !["cursor", "text-caret"].includes(target.kind)
     ) {
-      const tracked = track(prevPyramid, P, featurePoints, 1.1, 4, 8),
+      const tracked = track(prevPyramid, P, featurePoints, 0.8, 7, 10),
         src = [],
         dst = [];
       tracked.forEach((p, i) => {
@@ -425,7 +438,12 @@ export function createUniversalTracker(selection, sourceW, sourceH) {
             y: at[1] / sy,
             scale: scale * Math.hypot(fit.H[0], fit.H[3]),
             angle: rotation + Math.atan2(fit.H[3], fit.H[0]),
+            inliers: fit.inliers.length,
+            /* share of the points that survived the forward-backward check and agree on one motion */
+            agreement: fit.inliers.length / featurePoints.length,
           };
+          /* carry the agreeing points on, so a point cloud follows the target rather than re-seeding from scratch */
+          carried = fit.inliers.map((i) => dst[i]);
         }
       }
     }
@@ -456,14 +474,53 @@ export function createUniversalTracker(selection, sourceW, sourceH) {
       if (f && (!found || f.score > found.score)) found = f;
     }
     const stationary =
-      found && Math.hypot(found.x - last.x, found.y - last.y) < 2;
+        found && Math.hypot(found.x - last.x, found.y - last.y) < 2,
+      /* enough points survived the forward-backward check and move together: real-world targets (a logo on a shirt,
+       * a car, a sign) bend and turn so the first-frame template stops matching long before the target is gone */
+      strongFlow =
+        flow && misses === 0 && flow.inliers >= 8 && flow.agreement >= 0.45,
+      templateOk =
+        found &&
+        found.score > 0.82 &&
+        (found.gap > 0.025 || (stationary && found.score > 0.97));
     if (
-      found &&
-      found.score > 0.82 &&
-      (found.gap > 0.025 || (stationary && found.score > 0.97))
+      templateOk &&
+      !(
+        strongFlow &&
+        Math.hypot(found.x - flow.x, found.y - flow.y) >
+          Math.max(6, 0.2 * Math.min(target.region.width, target.region.height) * scale)
+      )
     ) {
       const result = accept(packet, found, misses > 0);
-      seed();
+      seed(strongFlow ? carried : null);
+      return { observation: result, requests: [] };
+    }
+    if (strongFlow) {
+      const result = accept(packet, {
+        x: flow.x,
+        y: flow.y,
+        scale: flow.scale,
+        angle: flow.angle,
+        score: clamp(0.55 + 0.4 * flow.agreement, 0, 0.95),
+        gap: 0,
+      });
+      result.method = "point-cloud-flow";
+      /* keep one template that follows the target's current look, so a later loss can be re-detected */
+      if (++flowRun % 6 === 0) {
+        const r = target.region,
+          w = r.width * scale,
+          h = r.height * scale;
+        try {
+          const t = template(packet.roi, {
+            ...target,
+            anchorX: last.x,
+            anchorY: last.y,
+            region: { x: last.x - w / 2, y: last.y - h / 2, width: w, height: h },
+          });
+          if (t.variance >= 18) bank[bank.length < 4 ? bank.length : 3] = t;
+        } catch {}
+      }
+      seed(carried);
       return { observation: result, requests: [] };
     }
     misses++;
@@ -562,8 +619,10 @@ export function createUniversalTracker(selection, sourceW, sourceH) {
 }
 /** Never interpolate through invisible targets, hard jumps or manual cuts. */
 export function observationAt(observations, timeUs) {
-  if (!observations.length || timeUs < observations[0].sourceTimeUs)
+  if (!observations.length || timeUs < observations[0].sourceTimeUs - 100000)
     return null;
+  /* a file whose first frame is stamped a frame after zero still shows that frame at zero */
+  if (timeUs < observations[0].sourceTimeUs) return { ...observations[0] };
   let lo = 0,
     hi = observations.length - 1;
   while (lo < hi) {

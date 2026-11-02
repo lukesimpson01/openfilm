@@ -20,7 +20,7 @@ function PlaneMarker({quad,focus=false}:{quad:[number,number][];focus?:boolean})
   const tri=(a:[number,number],b:[number,number],fill:string,k:string)=><polygon key={k} points={[a,b,peak].map(p=>p.join(',')).join(' ')} fill={fill}/>;
   const tone=focus?['#ffe08a','#f8c537','#d99a0b','#eab308']:['#c7d4ff','#7d97f7','#3f5bd6','#5a76ea'];
   return <g style={{filter:'drop-shadow(0 1px 2px rgba(0,0,0,.45))'}}>
-    <polygon points={[pt(0,0),pt(1,0),pt(1,1),pt(0,1)].join(' ')} fill={focus?'rgba(250,204,21,.16)':'rgba(69,104,238,.10)'} stroke={focus?'#facc15':'rgba(120,150,255,.75)'} strokeWidth={focus?1.6:1}/>
+    <polygon points={[pt(0,0),pt(1,0),pt(1,1),pt(0,1)].join(' ')} fill={focus?'rgba(250,204,21,.22)':'rgba(69,104,238,.20)'} stroke={focus?'#facc15':'rgba(150,175,255,.95)'} strokeWidth={focus?1.6:1}/>
     <g stroke={focus?'rgba(250,204,21,.45)':'rgba(160,185,255,.35)'} strokeWidth={.8}>{grid}</g>
     {tri(top,right,tone[0],'a')}{tri(right,bottom,tone[1],'b')}{tri(bottom,left,tone[2],'c')}{tri(left,top,tone[3],'d')}
     <polygon points={[top,right,bottom,left].map(p=>p.join(',')).join(' ')} fill="none" stroke="white" strokeWidth={1.1} strokeLinejoin="round"/>
@@ -39,13 +39,17 @@ export function useStageRect() {
   return rect;
 }
 
-export function StageOverlay({ nodes = [], surfaces=[], showSurfaces=false, focus=null, path, target, points, pick, pickBounds, onPick, onCancel, onMove, onDrop, hint, box }: {
+const diamondStyle = typeof document !== 'undefined' && !document.getElementById('scene-track-diamond-style') ? (() => { const el = document.createElement('style'); el.id = 'scene-track-diamond-style'; el.textContent = '@keyframes scene-diamond-in{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}.scene-track-diamond{animation:scene-diamond-in 260ms cubic-bezier(.22,1,.36,1) both}.scene-track-target{animation:scene-diamond-in 140ms ease-out both}@media(prefers-reduced-motion:reduce){.scene-track-diamond,.scene-track-target{animation:none}}'; document.head.appendChild(el); return el; })() : null;
+void diamondStyle;
+export function StageOverlay({ nodes = [], surfaces=[], trackPoints=[], hoverTarget=null, onHover, showSurfaces=false, focus=null, path, target, points, pick, pickBounds, onPick, onCancel, onMove, onDrop, hint, box }: {
   /** the diamonds stay on the picture outside pick mode too (a click on one picks it); focus: the chosen spot's plane */
   showSurfaces?: boolean; focus?: [number, number][] | null;
   nodes?: OverlayNode[]; path?: [number, number][]; target?: { x: number; y: number; zoom?: number } | null; points?: [number, number][];
   surfaces?:SurfaceMarker[];
+  /** the camera solve's own landmarks (After Effects style): small targets on the picture; a hovered triangle of them shows the plane they lie on */
+  trackPoints?:{id:string;x:number;y:number;selected?:boolean}[]; hoverTarget?:{tri:[number,number][];plane:[number,number][]|null;ring?:[number,number][]|null;ids:string[]}|null; onHover?:(x:number,y:number)=>void;
   /** pick mode: the next click on the picture is a point (crosshair cursor) */
-  pick?: boolean; pickBounds?: { x: number; y: number; w: number; h: number }; onPick?: (x: number, y: number) => void; onCancel?: () => void;
+  pick?: boolean; pickBounds?: { x: number; y: number; w: number; h: number }; onPick?: (x: number, y: number, shift?: boolean) => void; onCancel?: () => void;
   onMove?: (id: string, x: number, y: number) => void; onDrop?: (id: string, x: number, y: number) => void; hint?: string;
   box?: [number, number, number, number] | null;
 }) {
@@ -69,7 +73,14 @@ export function StageOverlay({ nodes = [], surfaces=[], showSurfaces=false, focu
         {line && (path || shown.length > 1) ? <polyline points={line} fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth={1.5} strokeDasharray="5 4" style={{ filter: 'drop-shadow(0 0 2px rgba(0,0,0,.8))' }} /> : null}
         {(points ?? []).map(([x, y], i) => { const [a, b] = P(x, y); return <circle key={i} cx={a} cy={b} r={2.2} fill="#4ade80" stroke="rgba(0,0,0,.6)" strokeWidth={0.8} />; })}
         {(pick||showSurfaces)&&<g clipPath={`url(#${clipId}-pick)`}>{visibleSurfaces.map((s,i)=><g key={s.id} className="scene-surface-marker" style={{animationDelay:`${i*22}ms`,opacity:pick?1:.85}}><PlaneMarker quad={(s.plane??s.quad).map(p=>[...P(...p)] as [number,number])}/></g>)}
-          {focus&&focus.every(p=>p.every(Number.isFinite))?<PlaneMarker focus quad={focus.map(p=>[...P(...p)] as [number,number])}/>:null}</g>}
+          {focus&&focus.every(p=>p.every(Number.isFinite))?<PlaneMarker focus quad={focus.map(p=>[...P(...p)] as [number,number])}/>:null}
+          {pick&&trackPoints.map((tp,i)=>{const [a,b]=P(tp.x,tp.y),r=tp.selected?6:4.2;return <g key={tp.id} className="scene-track-diamond" style={{transformOrigin:`${a}px ${b}px`,animationDelay:`${i*38}ms`}}><polygon points={`${a},${b-r} ${a+r},${b} ${a},${b+r} ${a-r},${b}`} fill={tp.selected?'#fbbf24':'rgba(255,255,255,.95)'} stroke={tp.selected?'#92400e':'rgba(37,99,235,.95)'} strokeWidth={1.3}/></g>;})}
+          {pick&&hoverTarget?(()=>{const t=hoverTarget.tri.map(p=>P(...p));const ring=hoverTarget.ring?.map(p=>P(...p));const plane=hoverTarget.plane?.map(p=>P(...p));const c=ring?[ring.reduce((a,p)=>a+p[0],0)/ring.length,ring.reduce((a,p)=>a+p[1],0)/ring.length]:[(t[0][0]+t[1][0]+t[2][0])/3,(t[0][1]+t[1][1]+t[2][1])/3];return <g className="scene-track-target">
+            {plane?<polygon points={plane.map(p=>p.join(',')).join(' ')} fill="rgba(37,99,235,.07)" stroke="rgba(37,99,235,.35)" strokeWidth={1} strokeDasharray="3 3"/>:null}
+            {ring?<polygon points={ring.map(p=>p.join(',')).join(' ')} fill="rgba(239,68,68,.20)" stroke="#ef4444" strokeWidth={1.6}/>:<polygon points={t.map(p=>p.join(',')).join(' ')} fill="rgba(239,68,68,.16)" stroke="#ef4444" strokeWidth={1.4}/>}
+            {t.map((p,i)=><circle key={i} cx={p[0]} cy={p[1]} r={2.4} fill="#fff" stroke="#ef4444" strokeWidth={1}/>)}
+            <circle cx={c[0]} cy={c[1]} r={2.6} fill="#ef4444"/></g>;})():null}
+          </g>}
         {box ? (() => { const [a, b] = P(box[0], box[1]); const [c, d] = P(box[2], box[3]); return <rect x={a} y={b} width={c - a} height={d - b} fill="rgba(69,104,238,.12)" stroke="#4568ee" strokeWidth={1.5} strokeDasharray="4 3" />; })() : null}
         {target ? (() => { const [a, b] = P(target.x, target.y); const z = target.zoom ?? 1; const w = rect.width / z, h = rect.height / z; return (
           <g><rect x={a - w / 2} y={b - h / 2} width={w} height={h} fill="none" stroke="#fbbf24" strokeWidth={1.5} strokeDasharray="6 4" /><line x1={a - 10} y1={b} x2={a + 10} y2={b} stroke="#fbbf24" strokeWidth={2} /><line x1={a} y1={b - 10} x2={a} y2={b + 10} stroke="#fbbf24" strokeWidth={2} /></g>); })() : null}
@@ -77,7 +88,7 @@ export function StageOverlay({ nodes = [], surfaces=[], showSurfaces=false, focu
       </svg>
       {pick && bounds.right > bounds.left && bounds.bottom > bounds.top ? (
         <div className="fixed z-40 cursor-crosshair rounded-[4px] ring-1 ring-[var(--accent)]/70" style={{ left: bounds.left, top: bounds.top, width: bounds.right-bounds.left, height: bounds.bottom-bounds.top }}
-          onPointerDown={(e) => { const [x, y] = toStage(e.clientX, e.clientY); onPick?.(x, y); }}>
+          onPointerDown={(e) => { const [x, y] = toStage(e.clientX, e.clientY); onPick?.(x, y, e.shiftKey); }} onPointerMove={(e) => { if (onHover) { const [x, y] = toStage(e.clientX, e.clientY); onHover(x, y); } }}>
           {hint ? <span className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/75 px-2.5 py-1 text-[11px] font-medium text-white shadow">{hint}</span> : null}
         </div>
       ) : null}

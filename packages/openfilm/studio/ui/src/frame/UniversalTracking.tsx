@@ -30,7 +30,7 @@ import {
 } from "./universal-motion.js";
 import { observationAt } from "./universal-core.js";
 import { clingTarget } from "./cling.js";
-import { consumeUniversalTracking } from "./universal-open";
+import { consumeUniversalTracking, consumeUniversalKind } from "./universal-open";
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const presets: [TargetKind, string][] = [
   ["cursor", "Cursor"],
@@ -279,13 +279,14 @@ export function UniversalTracking({
       }
       source.current = s;
       setDims({ w: s.w, h: s.h });
-      const p = await s.sink.getSample(
-        clamp(
-          outside ? sourceTime(clip ?? {}, selectionTime, block.startMs / 1000) : currentSource(),
-          clip?.time?.[0] ?? 0,
-          clip?.time?.[1] ?? s.duration,
-        ),
+      const wanted = clamp(
+        outside ? sourceTime(clip ?? {}, selectionTime, block.startMs / 1000) : currentSource(),
+        clip?.time?.[0] ?? 0,
+        clip?.time?.[1] ?? s.duration,
       );
+      /* a clip whose first frame is stamped a hair after zero has no sample at exactly zero: ask a frame or two later */
+      let p = await s.sink.getSample(wanted);
+      for (const step of [0.034, 0.067, 0.1]) if (!p) p = await s.sink.getSample(wanted + step);
       if (token !== session.current) {
         p?.close();
         return;
@@ -321,7 +322,7 @@ export function UniversalTracking({
       timer = setTimeout(() => {
         if (!consumeUniversalTracking(block.clipId)) return;
         if (busy) { setError('Wait for the current tracking job to finish.'); return; }
-        void beginRef.current('point');
+        void beginRef.current(consumeUniversalKind());
       }, 0);
     };
     window.addEventListener('frame-open-universal-tracking', open);
@@ -376,7 +377,8 @@ export function UniversalTracking({
     }
     setSelection({
       id: correctId(),
-      kind: custom ? "custom" : kind,
+      /* a dragged area keeps the mode it was chosen in (Face, Object); only a plain point becomes a custom area */
+      kind: custom && kind === "point" ? "custom" : kind,
       sourceTimeUs:
         sample.current?.microsecondTimestamp ??
         Math.round(currentSource() * 1e6),
@@ -422,7 +424,13 @@ export function UniversalTracking({
     );
     if (!r.ok) throw Error("Could not save the tracking settings.");
     setSaved(next);
+    /* the film reloads its footage after a save and can draw before the video has a frame (a black picture until the
+     * next seek): ask for the playhead's frame again once it has had time to load */
+    for (const wait of [700, 1600])
+      setTimeout(() => window.dispatchEvent(new CustomEvent("frame-seek", { detail: playhead.current / 1000 })), wait);
   }
+  const playhead = React.useRef(timeMs);
+  playhead.current = timeMs;
   async function saveUpdatedLayer(layer: Awaited<ReturnType<typeof readLayer>>) {
     if (!layer) return;
     await writeLayer(projectId, layer);
@@ -669,7 +677,7 @@ export function UniversalTracking({
       <button
         className={T.secondary}
         disabled={busy}
-        onClick={() => void begin("point")}
+        onClick={() => void begin(kind)}
       >
         <Crosshair size={14} />
         {selection ? "Choose a different target" : "Choose a target on the video"}

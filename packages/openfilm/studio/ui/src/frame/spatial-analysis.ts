@@ -25,3 +25,18 @@ export async function correctSpatialMasks(projectId:string,src:string,from:numbe
  const base=`/api/projects/${projectId}/spatial`,response=await fetch(base+'/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'mask-correction',src,from,to,baseOcclusion,corrections}),signal}),initial=await response.json();if(!response.ok)throw Error(initial.error||'Mask correction could not start.');
  const cancel=()=>{void fetch(base+'/jobs/'+initial.id,{method:'DELETE'}).catch(()=>{});};signal.addEventListener('abort',cancel,{once:true});try{let job=initial;for(;;){signal.throwIfAborted();progress(job.share??0,job.stage??'Applying mask corrections');if(job.state==='done')return job.path as string;if(['error','cancelled'].includes(job.state))throw Error(job.error||'Mask correction failed.');await new Promise(ok=>setTimeout(ok,400));job=await fetch(base+'/jobs/'+initial.id,{signal}).then(r=>r.json());}}finally{signal.removeEventListener('abort',cancel);}
 }
+
+/** Re-aligns a scanned surface track to its reference patch at full analysis size (sub-pixel). Returns the refined frames, or
+ *  null when the native runtime is not installed or the refinement fails: the scan's own track then stands. */
+export async function refineTrackNative(projectId:string,folder:string,src:string,from:number,to:number,track:{w:number;h:number;frames:any[]},quad:number[][],signal?:AbortSignal):Promise<{frames:any[];refined:number;considered:number}|null>{
+ const base=`/api/projects/${projectId}/spatial`;
+ try{
+  const status=await fetch(base+'/status',{signal}).then(r=>r.ok?r.json():null);if(!status?.native)return null;
+  const frames=track.frames;if(frames.length<2||frames.length>1500)return null;const refIndex=Math.max(0,frames.findIndex(f=>f.ref));
+  const body={kind:'refine-track',src,from,to,quad,trackW:track.w,trackH:track.h,times:frames.map(f=>f.t),H:frames.map(f=>f.H),lost:frames.map(f=>!!f.lost),refIndex,maxFrames:240};
+  const r=await fetch(base+'/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal}),initial=await r.json();if(!r.ok)return null;
+  let job=initial;while(job.state!=='done'){signal?.throwIfAborted();if(['error','cancelled'].includes(job.state))return null;await new Promise(ok=>setTimeout(ok,400));job=await fetch(`${base}/jobs/${initial.id}`,{signal}).then(x=>x.json());}
+  const out=await fetch(`${folder}${job.path}`,{signal,cache:'no-store'}).then(x=>x.ok?x.json():null);
+  return out?.frames?.length===frames.length?out:null;
+ }catch(e){if(signal?.aborted)throw e;return null;}
+}
