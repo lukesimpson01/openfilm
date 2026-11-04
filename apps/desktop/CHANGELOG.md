@@ -1,5 +1,16 @@
 # @openfilm/desktop
 
+## 0.2.8
+
+### Patch Changes
+
+- [#338](https://github.com/openfilm/openfilm/pull/338) [`2e18a4b`](https://github.com/openfilm/openfilm/commit/2e18a4bdf54647b2ece3c0975a6f9573720c7821) Thanks [@yunloong-Y](https://github.com/yunloong-Y)! - Desktop: the Community's "Use it" and "make one with the agent" now close it, putting the person at the conversation. A skill only added keeps the Skills page open, where the person sees it.
+
+- [#321](https://github.com/openfilm/openfilm/pull/321) [`9375992`](https://github.com/openfilm/openfilm/commit/9375992b922adba0c1947e3ae831ac928149b43e) Thanks [@WEBGRS](https://github.com/WEBGRS)! - On Windows, looking for the agents holds the app about half as long: each agent's program is looked for once per look instead of twice, and the thousands of files that aren't there are told without making an error for each.
+
+- Updated dependencies [[`2e18a4b`](https://github.com/openfilm/openfilm/commit/2e18a4bdf54647b2ece3c0975a6f9573720c7821), [`1ca1a64`](https://github.com/openfilm/openfilm/commit/1ca1a64c77bc190bbd7f9882a2f462040431f103), [`df83773`](https://github.com/openfilm/openfilm/commit/df837734056146968fcdea96edef081c615eccf6), [`ab5b108`](https://github.com/openfilm/openfilm/commit/ab5b1080384da522c84cc43a985cec2811fafa2f), [`bf46b5f`](https://github.com/openfilm/openfilm/commit/bf46b5f006b042f7c34ec316a4ed6f684549e992), [`09e18d7`](https://github.com/openfilm/openfilm/commit/09e18d7089aa4f51445f23b0708ac3d95a1077c4), [`623cec4`](https://github.com/openfilm/openfilm/commit/623cec4297aa6c134d1426c796e79f5845724433), [`452d117`](https://github.com/openfilm/openfilm/commit/452d117c6a412c6e3e76f8c259cb0f9ab2680b8b), [`f594a19`](https://github.com/openfilm/openfilm/commit/f594a1964c073ef71fcecad57180e293b084fb74)]:
+  - openfilm@0.2.8
+
 ## 0.2.7
 
 ### Patch Changes

@@ -1,5 +1,27 @@
 # openfilm
 
+## 0.2.8
+
+### Patch Changes
+
+- [#338](https://github.com/openfilm/openfilm/pull/338) [`2e18a4b`](https://github.com/openfilm/openfilm/commit/2e18a4bdf54647b2ece3c0975a6f9573720c7821) Thanks [@yunloong-Y](https://github.com/yunloong-Y)! - Desktop: the Community's "Use it" and "make one with the agent" now close it, putting the person at the conversation. A skill only added keeps the Skills page open, where the person sees it.
+
+- [#332](https://github.com/openfilm/openfilm/pull/332) [`1ca1a64`](https://github.com/openfilm/openfilm/commit/1ca1a64c77bc190bbd7f9882a2f462040431f103) Thanks [@rick-mingyu-liu](https://github.com/rick-mingyu-liu)! - Studio's Layers panel lists a page that took a moment to draw. A page coming on is in the picture only once its first frame is drawn; the panel had read the picture before that (a slow page, a slow computer) and not again, so the page was missing from the list until the playhead moved. The picture now tells Studio when a page it drew came on, and the panel reads again.
+
+- [#334](https://github.com/openfilm/openfilm/pull/334) [`df83773`](https://github.com/openfilm/openfilm/commit/df837734056146968fcdea96edef081c615eccf6) Thanks [@WEBGRS](https://github.com/WEBGRS)! - `look --full` watches every frame of the rendered film (or of a video given to `look`) for what a dozen frames miss: white flashes, frames unlike those on both sides, still pictures of 6 seconds or more, and black, each with its time. One ffmpeg decode at two small sizes; a 2-minute film takes a few seconds.
+
+- [#333](https://github.com/openfilm/openfilm/pull/333) [`ab5b108`](https://github.com/openfilm/openfilm/commit/ab5b1080384da522c84cc43a985cec2811fafa2f) Thanks [@WEBGRS](https://github.com/WEBGRS)! - Loudness: `render --loudness=<LUFS>` and a Loudness choice in Studio's video export bring the film's sound to a delivery target (-14 for streaming, -16 for podcasts, -23 for broadcast), its true peaks under -1 dBTP. The mix is measured, raised or lowered as a whole, and its few loudest peaks are caught by a limiter working at four times the sample rate, then measured again as encoded; the picture is not touched. `look --loudness=<LUFS>` says how far the mix is from a target. Without the option, nothing changes.
+
+- [#341](https://github.com/openfilm/openfilm/pull/341) [`bf46b5f`](https://github.com/openfilm/openfilm/commit/bf46b5f006b042f7c34ec316a4ed6f684549e992) Thanks [@rick-mingyu-liu](https://github.com/rick-mingyu-liu)! - A film's sound mix ended with its last sound at times, not at the film's end (ffmpeg 8 on Linux, about one mix in 25 when the sounds are files of their own): the mixed frames came without timestamps, and the padding to the film's length goes by them. The mix is given its timestamps, from its samples, before it is padded.
+
+- [#322](https://github.com/openfilm/openfilm/pull/322) [`09e18d7`](https://github.com/openfilm/openfilm/commit/09e18d7089aa4f51445f23b0708ac3d95a1077c4) Thanks [@WEBGRS](https://github.com/WEBGRS)! - Exports: on Windows and Linux, a ProRes 4444 video's likely size now reaches 1.6 times ProRes's rate, as ffmpeg's encoder there spends up to that on detailed footage. On a Mac, which encodes ProRes on its media engine, the range is as before.
+
+- [#342](https://github.com/openfilm/openfilm/pull/342) [`623cec4`](https://github.com/openfilm/openfilm/commit/623cec4297aa6c134d1426c796e79f5845724433) Thanks [@WEBGRS](https://github.com/WEBGRS)! - Providers: Settings › Providers links each service's own pricing page, as "Pricing" beside what it makes.
+
+- [#320](https://github.com/openfilm/openfilm/pull/320) [`452d117`](https://github.com/openfilm/openfilm/commit/452d117c6a412c6e3e76f8c259cb0f9ab2680b8b) Thanks [@rick-mingyu-liu](https://github.com/rick-mingyu-liu)! - Studio on Windows: an item the Recycle Bin cannot take (on a network or removable drive, bigger than the bin of its drive holds, or a bin set to delete right away) is no longer deleted for good without a word. Deleting it is refused with the reason, and the file, folder, project or skill stays where it is, for File Explorer to delete.
+
+- [#335](https://github.com/openfilm/openfilm/pull/335) [`f594a19`](https://github.com/openfilm/openfilm/commit/f594a1964c073ef71fcecad57180e293b084fb74) Thanks [@WEBGRS](https://github.com/WEBGRS)! - Subtitles: "um" is printed where it is a word. A transcript that reads as Portuguese ("um dia") or German ("um acht Uhr") keeps it; elsewhere it is still left out as the English hesitation.
+
 ## 0.2.7
 
 ### Patch Changes
