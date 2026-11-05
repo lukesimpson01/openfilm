@@ -20,18 +20,27 @@ export const SOUND_RECORDINGS = {
   },
   "flash": {
     "name": "Flash",
-    "status": "unresolved",
-    "title": "Flash",
-    "pageUrl": "https://www.myinstants.com/en/instant/flash/",
-    "mediaUrl": "https://www.myinstants.com/media/sounds/flash.mp3",
-    "sha256": "1097290a832e36a0e7ab8c63566e1a11da57ab10d6d1c2e2a032075049bf0db8",
-    "duration": 3.363583,
-    "reason": "The exact-title page contains music; a camera flash effect is not verified."
+    "status": "verified",
+    "substitute": true,
+    "title": "Camera Flash_Crackle_Near_Mono.wav",
+    "pageUrl": "https://freesound.org/people/_stubb/sounds/406614/",
+    "mediaUrl": "https://cdn.freesound.org/previews/406/406614_6068748-hq.mp3",
+    "duration": 1.075542,
+    "sha256": "64554e269328def16d89573028b8a5947a3f02580865c00905b3f6c8ffd066be",
+    "author": "_stubb",
+    "license": "CC0-1.0"
   },
   "razor-slash": {
     "name": "Razor Slash",
-    "status": "unresolved",
-    "reason": "No exact source title matched."
+    "status": "verified",
+    "substitute": true,
+    "title": "Slash",
+    "pageUrl": "https://freesound.org/people/qubodup/sounds/442903/",
+    "mediaUrl": "https://cdn.freesound.org/previews/442/442903_71257-hq.mp3",
+    "duration": 0.260431,
+    "sha256": "880c7baf9dbbfd3d1a7b8608f0b3a652e59bfb0ace078d40a8b66f50ebf4c278",
+    "author": "qubodup",
+    "license": "CC0-1.0"
   },
   "whoosh": {
     "name": "Whoosh",
@@ -53,28 +62,51 @@ export const SOUND_RECORDINGS = {
   },
   "swipe": {
     "name": "Swipe",
-    "status": "unresolved",
-    "title": "Swipe",
-    "pageUrl": "https://www.myinstants.com/en/instant/swipe-86509/",
-    "mediaUrl": "https://www.myinstants.com/media/sounds/swipe.mp3",
-    "sha256": "02f2a7f0863c9f2a5564314abc74cd64cff406c7fc550a29802aa5c88b5cf796",
-    "duration": 3.96,
-    "reason": "The exact-title page contains a spoken cosmetics quote; a swipe transition effect is not verified."
+    "status": "verified",
+    "substitute": true,
+    "title": "Swipe.wav",
+    "pageUrl": "https://freesound.org/people/LilMati/sounds/702773/",
+    "mediaUrl": "https://cdn.freesound.org/previews/702/702773_6142149-hq.mp3",
+    "duration": 0.879958,
+    "sha256": "a405756d41095ca8caa4b463e8a2a63abbbd05fe1c65f0f7253e191c0ec918c1",
+    "author": "LilMati",
+    "license": "CC0-1.0"
   },
   "zoom-in-out": {
     "name": "Zoom In / Out",
-    "status": "unresolved",
-    "reason": "No exact source title matched."
+    "status": "verified",
+    "substitute": true,
+    "title": "Dramatic Camera Zoom",
+    "pageUrl": "https://freesound.org/people/sanaku/sounds/371882/",
+    "mediaUrl": "https://cdn.freesound.org/previews/371/371882_4641400-hq.mp3",
+    "duration": 2.510272,
+    "sha256": "fbdccb1f425e8a50d1593ecd124b81655b58bf2d4880c066f5c5c24fe0dfb30a",
+    "author": "sanaku",
+    "license": "CC0-1.0"
   },
   "reverse-whoosh": {
     "name": "Reverse Whoosh",
-    "status": "unresolved",
-    "reason": "No exact source title matched."
+    "status": "verified",
+    "substitute": true,
+    "title": "Backwards Whoosh",
+    "pageUrl": "https://freesound.org/people/SlavicMagic/sounds/446010/",
+    "mediaUrl": "https://cdn.freesound.org/previews/446/446010_7079899-hq.mp3",
+    "duration": 0.661565,
+    "sha256": "ff4a19d5476ca9d84b0f219a6e7edc5de64a520f3ecca52db05570d145380622",
+    "author": "SlavicMagic",
+    "license": "CC0-1.0"
   },
   "transition-sweep": {
     "name": "Transition Sweep",
-    "status": "unresolved",
-    "reason": "No exact source title matched."
+    "status": "verified",
+    "substitute": true,
+    "title": "Transition Swoosh",
+    "pageUrl": "https://freesound.org/people/adh.dreaming/sounds/632763/",
+    "mediaUrl": "https://cdn.freesound.org/previews/632/632763_12672694-hq.mp3",
+    "duration": 1.491882,
+    "sha256": "33b2bab2339b2229ef22b964e2e374d57edf6fe65159af4ba915f694a78f2d0c",
+    "author": "adh.dreaming",
+    "license": "CC0-1.0"
   },
   "glitch": {
     "name": "Glitch",
@@ -96,8 +128,15 @@ export const SOUND_RECORDINGS = {
   },
   "impact-hit": {
     "name": "Impact Hit",
-    "status": "unresolved",
-    "reason": "No exact source title matched."
+    "status": "verified",
+    "substitute": true,
+    "title": "Hit Impact",
+    "pageUrl": "https://freesound.org/people/MadPanCake/sounds/660770/",
+    "mediaUrl": "https://cdn.freesound.org/previews/660/660770_5334162-hq.mp3",
+    "duration": 0.444898,
+    "sha256": "88a1a1c9e3d38e4bad3cecc58edf8f2058fc484ac7f355bd8906897625304dd0",
+    "author": "MadPanCake",
+    "license": "CC0-1.0"
   },
   "cinematic-boom": {
     "name": "Cinematic Boom",
@@ -166,8 +205,15 @@ export const SOUND_RECORDINGS = {
   },
   "ui-tap": {
     "name": "UI Tap",
-    "status": "unresolved",
-    "reason": "No exact source title matched."
+    "status": "verified",
+    "substitute": true,
+    "title": "Aggressive Button Tap / UI Tap Hit",
+    "pageUrl": "https://freesound.org/people/subquire/sounds/833601/",
+    "mediaUrl": "https://cdn.freesound.org/previews/833/833601_150709-hq.mp3",
+    "duration": 0.56254,
+    "sha256": "db27c323abfab0d1661c7b90e78432b4333028c10a151212f362d63918a693dd",
+    "author": "subquire",
+    "license": "CC0-1.0"
   },
   "keyboard-typing": {
     "name": "Keyboard Typing",
@@ -189,8 +235,15 @@ export const SOUND_RECORDINGS = {
   },
   "text-reveal": {
     "name": "Text Reveal",
-    "status": "unresolved",
-    "reason": "No exact source title matched."
+    "status": "verified",
+    "substitute": true,
+    "title": "Data Reveal Sound",
+    "pageUrl": "https://freesound.org/people/Sky_Motion/sounds/511418/",
+    "mediaUrl": "https://cdn.freesound.org/previews/511/511418_7935195-hq.mp3",
+    "duration": 2.314063,
+    "sha256": "ee5efda7f3c694ed633ed4f10ace0cd7da88010553ccaafab95a66629afe2b66",
+    "author": "Sky_Motion",
+    "license": "CC0-1.0"
   },
   "digital-beep": {
     "name": "Digital Beep",
@@ -288,8 +341,15 @@ export const SOUND_RECORDINGS = {
   },
   "heavenly-music": {
     "name": "Heavenly Music",
-    "status": "unresolved",
-    "reason": "No exact source title matched."
+    "status": "verified",
+    "substitute": true,
+    "title": "Choir of Voices - Single Chord",
+    "pageUrl": "https://freesound.org/people/bone666138/sounds/274121/",
+    "mediaUrl": "https://cdn.freesound.org/previews/274/274121_285997-hq.mp3",
+    "duration": 6.302812,
+    "sha256": "4fa599b207618e064d2e1735cef3a7d73f3b70e9e8b1849a8e1542c4374bd845",
+    "author": "bone666138",
+    "license": "CC0-1.0"
   },
   "fah": {
     "name": "Fah",

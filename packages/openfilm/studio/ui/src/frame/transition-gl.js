@@ -435,6 +435,9 @@ vec3 premium(vec2 uv, float p, int e){
 float ripDist(vec2 uv){
   vec2 s = cover(uv, uAspA); int m = int(uRip3.x + .5);
   if (m == 0) return length((s - uRipO) * vec2(uAspA, 1.));
+  if (m == 4) { vec2 q = (s - uRipVP) * vec2(uAspA, 1.); float z = 1. / max(max(abs(q.x) / (.5 * uAspA), abs(q.y) / .5), .03);
+    /* uRipO: the origin's corridor depth at the start (x) and how far the camera has walked since, in the same units (y) */
+    return abs(z + uRipO.y - uRipO.x) * .25; }
   vec3 h = uRipM * vec3(s, 1.); if (h.z <= 1e-4) return 1e3; vec2 r = h.xy / h.z;
   if (m == 1) return length((r - uRipO) * vec2(uAspA, 1.));
   if (m == 2) return length(r - uRipO);

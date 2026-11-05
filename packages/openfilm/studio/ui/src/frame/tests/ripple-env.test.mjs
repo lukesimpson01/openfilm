@@ -50,3 +50,34 @@ test('the matte frame for a moment is the nearest one, and none when the nearest
   assert.deepEqual(matteAt(matte, .11).rect, [.5, 0, .5, .5]);
   assert.equal(matteAt(matte, 2), null);
 });
+
+/* a synthetic camera solve: 2 s at 30 fps, the camera at (0, 0, z(t)) turned by yaw(t) about the vertical axis */
+import { solvedCorridor, corridorHolds } from '../ripple-env.js';
+function solve(z, yaw) {
+  const poses = Array.from({ length: 61 }, (_, i) => {
+    const t = i / 30, a = yaw(t), c = Math.cos(a), s = Math.sin(a), R = [[c, 0, -s], [0, 1, 0], [s, 0, c]], C = [0, 0, z(t)];
+    const tr = R.map((r) => -(r[0] * C[0] + r[1] * C[1] + r[2] * C[2]));
+    return { sourceTimeUs: Math.round(t * 1e6), worldToCamera: R.map((r, k) => [...r, tr[k]]), intrinsics: [[300, 0, 270], [0, 300, 480], [0, 0, 1]] };
+  });
+  const points = Array.from({ length: 200 }, (_, i) => ({ xyz: [Math.sin(i) * 2, Math.cos(i * 1.7), 6 + (i % 10)] }));
+  return { width: 540, height: 960, shots: [{ id: 0, fromUs: 0, toUs: 2e6, poses, points }] };
+}
+
+test('a camera walking straight down a corridor: a steady vanishing point and a walked distance in scene units', () => {
+  const sol = solve((t) => t * 2, () => 0);
+  const a = solvedCorridor(sol, 0, { start: 0 }), b = solvedCorridor(sol, 1.5, { start: 0 });
+  assert.ok(Math.abs(a.vp[0] - .5) < 1e-6 && Math.abs(a.vp[1] - .5) < 1e-6, JSON.stringify(a.vp));
+  assert.ok(Math.abs(b.vp[0] - .5) < 1e-6);
+  /* 3 m walked against a median depth of 10.5 m */
+  assert.ok(Math.abs(b.advance - 3 / 10.5) < .02, String(b.advance));
+  assert.equal(corridorHolds(sol, 0, 2, [.5, .5], 9 / 16), true);
+});
+
+test('a camera that turns to face sideways during the ripple does not get a corridor', () => {
+  const sol = solve((t) => t * 2, (t) => t * Math.PI / 4);
+  assert.equal(corridorHolds(sol, 0, 2, [.5, .5], 9 / 16), false);
+});
+
+test('a camera that barely moves gives no corridor', () => {
+  assert.equal(solvedCorridor(solve((t) => t * .05, () => 0), 1, { start: 0 }), null);
+});

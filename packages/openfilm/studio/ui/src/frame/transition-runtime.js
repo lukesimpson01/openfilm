@@ -46,6 +46,11 @@ export function createTransition(layer, root) {
   const A = media(layer.aSrc), B = single ? A : media(layer.bSrc);
   const duration = Math.max(0.05, layer.duration || 0.5);
   const curve = Array.isArray(layer.params?.curve) && layer.params.curve.length > 1 ? layer.params.curve : null;
+  /* the part of this page the timeline shows (its clip's #t=a,b): a ripple trimmed or split on the timeline plays its
+     whole animation — build-up, waves, impact, settling — inside what is left, instead of being cut off mid-wave */
+  const ripple = /ripple$/.test(String(layer.effect));
+  const shown = (() => { try { const m = /#t=([\d.]+),([\d.]+)/.exec(window.frameElement?.getAttribute('src') ?? ''); return m && +m[2] > +m[1] ? [+m[1], Math.min(+m[2], duration)] : null; } catch { return null; } })();
+  const window0 = ripple && shown ? shown[0] : 0, windowLength = ripple && shown ? Math.max(0.05, shown[1] - shown[0]) : duration;
   /* ready means ready to play through: both videos already at their first frames and that frame drawn, while the page
      wakes ahead of the cut. Seeking them only once the cut is reached (mid-GOP, both at once) left a live preview
      black for its first part, and the motion late */
@@ -82,7 +87,7 @@ export function createTransition(layer, root) {
       }
       await (single ? seek(A, aTime) : Promise.all([seek(A, aTime), seek(B, bTime)]));
       /* a dip through black at a free edge: only the half that leaves or reaches the picture */
-      let p = curve ? curveAt(curve, u) : u;
+      let p = curve ? curveAt(curve, u) : ripple ? Math.min(Math.max((tt - window0) / windowLength, 0), 1) : u;
       if (DIPS.has(layer.effect) && layer.edge === 'in') p = 0.5 + p / 2;
       else if (DIPS.has(layer.effect) && layer.edge === 'out') p = p / 2;
       /* velocity: the curve retimed the footage, the picture is drawn straight */
@@ -92,10 +97,10 @@ export function createTransition(layer, root) {
       const scene = await rippleScene;
       if (scene) {
         const w = A.videoWidth || A.naturalWidth || 16, h = A.videoHeight || A.naturalHeight || 9;
-        const want = layer.params.geometry === 'auto' || !layer.params.geometry ? (layer.params.surfaceQuad ? 'surface' : scene.foe ? 'corridor' : 'scene') : layer.params.geometry;
+        const want = layer.params.geometry === 'auto' || !layer.params.geometry ? (layer.params.surfaceQuad ? 'surface' : scene.foe || scene.solution ? 'corridor' : 'scene') : layer.params.geometry;
         /* the point picked on the stage, as the source pixel under it (the picture covers the stage) */
         const r = (canvas.width / canvas.height) / (w / h), sc = r > 1 ? [1, 1 / r] : [r, 1], c = layer.params.center ?? [0.5, 0.5];
-        rippleGeometry = rippleGeometryAt(scene, aTime, { want, origin: layer.params.origin ?? [(c[0] - 0.5) * sc[0] + 0.5, (c[1] - 0.5) * sc[1] + 0.5], start: layer.params.originTime ?? (layer.aAt ?? 0), surfaceQuad: layer.params.surfaceQuad ?? null, aspect: w / h });
+        rippleGeometry = rippleGeometryAt(scene, aTime, { want, origin: layer.params.origin ?? [(c[0] - 0.5) * sc[0] + 0.5, (c[1] - 0.5) * sc[1] + 0.5], start: layer.params.originTime ?? (layer.aAt ?? 0) + window0 * (layer.aSpeed || 1), end: (layer.aAt ?? 0) + (window0 + windowLength) * (layer.aSpeed || 1), surfaceQuad: layer.params.surfaceQuad ?? null, aspect: w / h });
       }
       if (layer.params?.reverse) renderer.render(B, A, 1 - p, { ...layer.params, rippleGeometry, id: layer.effect, duration, fps: layer.fps || 40, seed: layer.seed });
       else renderer.render(A, B, p, { ...layer.params, rippleGeometry, id: layer.effect, duration, fps: layer.fps || 40, seed: layer.seed });

@@ -33,7 +33,17 @@ export function RippleControls({ params, saved, set }: { params: Record<string, 
         <>
           <Slide label="Waves" value={params.waves ?? 5} min={1} max={8} step={1} onChange={(v) => set({ waves: v })} fmt={(v) => String(v)} />
           <Slide label="Thickness" value={params.thickness ?? 0.045} min={0.01} max={0.12} step={0.005} onChange={(v) => set({ thickness: v })} fmt={(v) => String(Math.round(v * 1000))} />
-          <Choice label="Environment" value={params.geometry ?? 'auto'} options={[['auto', 'Auto'], ['scene', 'Scene'], ['surface', 'Surface'], ['corridor', 'Corridor'], ['screen', 'Off']]} onChange={(v) => set({ geometry: v })} />
+          {/* five choices do not fit as segments in the inspector's width: a menu */}
+          <label className={row}>
+            <span className="w-[96px] shrink-0">Environment</span>
+            <select value={params.geometry ?? 'auto'} onChange={(e) => set({ geometry: e.target.value })} className={`${T.small} min-w-0 flex-1`} aria-label="Environment">
+              <option value="auto">Auto (from the scan)</option>
+              <option value="scene">Scene — stays where it starts</option>
+              <option value="surface">Surface — on a chosen wall</option>
+              <option value="corridor">Corridor — down the walk</option>
+              <option value="screen">Off — flat on the screen</option>
+            </select>
+          </label>
           <Choice label="Placement" value={params.placement ?? 'scene'} options={[['scene', 'Behind people'], ['foreground', 'Over all'], ['screen', 'Screen']]} onChange={(v) => set({ placement: v })} />
           <p className={T.hint}>
             {scanned

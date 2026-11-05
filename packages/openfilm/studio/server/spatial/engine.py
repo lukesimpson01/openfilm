@@ -147,7 +147,8 @@ def flow_relocalize(model,samples,image_path,poses):
 
 def geometry_mesh(points,poses,width,height):
     """Conservative observed surface triangles. Unsupported holes stay holes.
-    Triangles must recur in at least two independent observations, with bounded depth/edge span.
+    Triangles must recur in at least two independent observations, with bounded depth/edge span (a tenth of the depth at
+    most: a triangle joining a near object to the wall behind is a curtain in mid-air, not a surface).
     """
     by_id={p['id']:i for i,p in enumerate(points)};xyz=np.array([p['xyz'] for p in points]);counts={}
     for pose in poses:
@@ -164,7 +165,7 @@ def geometry_mesh(points,poses,width,height):
             if any(i is None for i in ids) or len(set(ids))!=3:continue
             vertices=xyz[ids];depth=vertices@M[2,:3]+M[2,3]
             lengths=np.array([np.linalg.norm(vertices[i]-vertices[(i+1)%3]) for i in range(3)])
-            if depth.min()<=0 or depth.max()/depth.min()>1.35 or lengths.max()>np.median(depth)*.2 or lengths.max()/max(1e-6,lengths.min())>4:continue
+            if depth.min()<=0 or depth.max()/depth.min()>1.1 or lengths.max()>np.median(depth)*.2 or lengths.max()/max(1e-6,lengths.min())>4:continue
             key=tuple(sorted(ids));counts[key]=counts.get(key,0)+1
     return {'vertices':xyz.tolist(),'triangles':[list(k) for k,n in counts.items() if n>=2],'confidence':.9}
 

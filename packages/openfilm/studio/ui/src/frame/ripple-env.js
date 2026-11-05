@@ -10,8 +10,12 @@
  *                on a wall are ellipses foreshortened by the wall's real perspective
  *   3 corridor — a walking-forward shot: depth read from the vanishing point (the camera's focus of expansion, measured
  *                from the homographies) through a box of connected floor, walls and ceiling; the wave travels down it
+ *   4 corridor, solved — the same box, driven by the scan's 3D camera solve: the vanishing point each frame is where
+ *                the camera is heading, depth is measured in units of the scene's own median depth, and the wave is
+ *                offset by how far the camera has actually walked, so a crest stays at one place in the corridor
  * A mode the scan cannot support falls back to the simpler one (corridor needs measured forward motion). */
 import { transformAt, homography, inv3, apply } from './track-core.js';
+import { spatialPoseAt } from './spatial-geometry.js';
 
 const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 const norm = (H) => H.map((v) => v / (H[8] || 1));
@@ -58,9 +62,44 @@ export async function loadRippleScene(resultPath, { fetchJson, loadImage }) {
   /* forward motion over the shot: the reference frame against the last verified frame */
   const last = [...track.frames].reverse().find((f) => !f.lost);
   const foe = last ? focusOfExpansion(normalise(last.H, track.w, track.h)) : null;
-  return { result, track, matte: matte && atlases.every(Boolean) ? { ...matte, images: atlases } : null, foe };
+  const solution = result.spatial ? await fetchJson(result.spatial) : null;
+  return { result, track, matte: matte && atlases.every(Boolean) ? { ...matte, images: atlases } : null, foe, solution: solution?.shots?.length ? solution : null };
 }
 
+
+const center = (pose) => { const R = pose.worldToCamera.map((r) => r.slice(0, 3)), t = pose.worldToCamera.map((r) => r[3]); return [0, 1, 2].map((j) => -(R[0][j] * t[0] + R[1][j] * t[1] + R[2][j] * t[2])); };
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+/** Where world direction d vanishes in a pose's frame, as a normalised point; null when d points sideways (under
+ * `forward` of its length toward the view) or back. */
+function headingPoint(solution, pose, d, forward = 0.35) {
+  const R = pose.worldToCamera.map((r) => r.slice(0, 3)), q = R.map((r) => dot3(r, d)), K = pose.intrinsics;
+  if (!(q[2] > forward * Math.hypot(...q))) return null;
+  return [(K[0][0] * q[0] / q[2] + K[0][2]) / solution.width, (K[1][1] * q[1] / q[2] + K[1][2]) / solution.height];
+}
+/** Depth through the corridor box at a normalised point, seen from vanishing point vp (the shader's own formula). */
+export const tunnelDepth = (p, vp, aspect) => 1 / Math.max(Math.abs((p[0] - vp[0]) * aspect) / (0.5 * aspect), Math.abs(p[1] - vp[1]) / 0.5, 0.03);
+/**
+ * The solved corridor at source second t: null unless the camera solve covers t and the start, and the camera really
+ * walks forward (at least a tenth of the scene's depth, heading into the view rather than sideways).
+ */
+export function solvedCorridor(solution, t, { start = t, origin = [0.5, 0.5], aspect = 9 / 16 } = {}) {
+  const at = (s) => spatialPoseAt(solution, Math.round(s * 1e6)), p0 = at(start), pt = at(t);
+  if (!p0 || !pt || p0.shotId !== pt.shotId) return null;
+  const shot = solution.shots.find((s) => s.id === p0.shotId), first = shot.poses[0], last = shot.poses[shot.poses.length - 1];
+  const travel = sub3(center(last), center(first)), length = Math.hypot(...travel);
+  /* the scene's own depth unit: the median depth of the solved points the start frame sees */
+  const R = p0.worldToCamera; const depths = [];
+  for (const point of shot.points ?? []) { const z = dot3(R[2].slice(0, 3), point.xyz) + R[2][3]; if (z > 0) depths.push(z); }
+  depths.sort((a, b) => a - b); const D = depths[depths.length >> 1];
+  if (!(D > 0) || !(length > 0.1 * D)) return null;
+  const heading = travel.map((v) => v / length);
+  /* the corridor is one direction of the world (the way the camera walks): its vanishing point in each frame is that
+     direction seen by that frame's camera, so it moves exactly as the scene does while the camera turns. It must face
+     into the view at the start; later it may swing far to a side (the box then reaches past the frame edge) */
+  const vp0 = headingPoint(solution, p0, heading), vp = headingPoint(solution, pt, heading, 0.08);
+  if (!vp0 || !vp) return null;
+  return { vp, z0: tunnelDepth(origin, vp0, aspect), advance: dot3(sub3(center(pt), center(p0)), heading) / D };
+}
 /** The matte frame nearest a source second, as an image and the sub-rectangle of its atlas (0…1). */
 export function matteAt(matte, t) {
   if (!matte?.images?.length) return null;
@@ -78,13 +117,36 @@ export function matteAt(matte, t) {
  * What the shader needs at source second t. `origin` is the ripple's start point in source coordinates at the effect's
  * first frame (start). Returns { mode, M (frame → distance space, row-major), origin (in distance space), vp, matte }.
  */
-export function rippleGeometryAt(scene, t, { want = 'scene', origin = [.5, .5], start = t, surfaceQuad = null, aspect = 9 / 16 } = {}) {
+/**
+ * Whether the solved corridor holds for the whole of a ripple (start … end): its vanishing point must stay near the
+ * frame and move smoothly. A camera that turns to face sideways mid-ripple fails this, and the ripple then uses the
+ * scene model for its whole length — never a switch of model partway through, which would be a visible jump.
+ */
+export function corridorHolds(solution, start, end, origin, aspect) {
+  let previous = null;
+  for (let t = start; t <= end + 1e-6; t += 1 / 30) {
+    const c = solvedCorridor(solution, t, { start, origin, aspect });
+    if (!c || c.vp[0] < -0.6 || c.vp[0] > 1.6 || c.vp[1] < -0.6 || c.vp[1] > 1.6) return false;
+    if (previous && Math.hypot(c.vp[0] - previous[0], c.vp[1] - previous[1]) > 0.2) return false;
+    previous = c.vp;
+  }
+  return true;
+}
+
+export function rippleGeometryAt(scene, t, { want = 'scene', origin = [.5, .5], start = t, end = null, surfaceQuad = null, aspect = 9 / 16 } = {}) {
   if (!scene || want === 'screen') return { mode: 0, M: IDENTITY, origin, vp: origin, matte: null };
   const { track } = scene, n = (time) => normalise(transformAt(track, time), track.w, track.h);
   const Ht = n(t), back = inv3(Ht), H0 = n(start), back0 = inv3(H0);
   if (!back || !back0) return { mode: 0, M: IDENTITY, origin, vp: origin, matte: matteAt(scene.matte, t) };
   const originRef = apply(back0, origin);
   const matte = matteAt(scene.matte, t);
+  if (want === 'corridor' && scene.solution) {
+    /* decided once per ripple (its start, end and origin), then reused for every frame */
+    const key = `${start}:${end}:${origin}`;
+    if (scene.corridorKey !== key) { scene.corridorKey = key; scene.corridorOk = end == null || corridorHolds(scene.solution, start, end, origin, aspect); }
+    const c = scene.corridorOk ? solvedCorridor(scene.solution, t, { start, origin, aspect }) : null;
+    if (c) return { mode: 4, M: IDENTITY, origin: [c.z0, c.advance], vp: c.vp, matte };
+  }
   if (want === 'corridor' && scene.foe) {
     /* measured in the reference frame, where a forward walk is a scaling about the focus of expansion: a crest at one
        corridor depth stays at that depth while the camera walks on */

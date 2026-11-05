@@ -1,17 +1,20 @@
 /** Shared visibility for flat assets and imported models. Native depth is meaningful only on its calibrated scale. */
+/* The reconstructed mesh hides an element only where it is clearly nearer (5 % of the depth): it is spun from sparse
+   points, so text placed on a reconstructed wall sits at the mesh's own depth give or take that much, and a tighter test
+   made the text z-fight with its own wall (patchy, then gone). A per-pixel depth map keeps its tight margin. */
 export const SPATIAL_OCCLUSION_GLSL=`
 uniform sampler2D uGeometryDepth;uniform sampler2D uSceneDepth;uniform sampler2D uForegroundMask;uniform sampler2D uInstanceMask;
 uniform float uHasGeometry;uniform float uHasSceneDepth;uniform float uHasForeground;uniform float uHasTarget;
 uniform float uOrdering;uniform float uManualDepth;uniform float uDepthRange;uniform vec4 uContent;
-float spatialDepthVisibility(vec3 packed,float elementZ,float range){
- float z=(packed.r*65280.+packed.g*255.)/65535.*range,margin=max(.006,abs(elementZ)*.005);
+float spatialDepthVisibility(vec3 packed,float elementZ,float range,float relative){
+ float z=(packed.r*65280.+packed.g*255.)/65535.*range,margin=max(.006,abs(elementZ)*relative);
  return mix(1.,1.-smoothstep(z+margin,z+2.*margin,elementZ),smoothstep(.5,.8,packed.b));
 }
 float spatialVisibility(vec2 source,float elementZ){
  if(source.x<uContent.x||source.y<uContent.y||source.x>uContent.x+uContent.z||source.y>uContent.y+uContent.w)return 0.;
- float geometry=1.;if(uHasGeometry>.5)geometry=spatialDepthVisibility(texture2D(uGeometryDepth,vec2(source.x,1.-source.y)).rgb,elementZ,100.);
+ float geometry=1.;if(uHasGeometry>.5)geometry=spatialDepthVisibility(texture2D(uGeometryDepth,vec2(source.x,1.-source.y)).rgb,elementZ,100.,.05);
  float foreground=uHasForeground>.5?smoothstep(.3,.7,texture2D(uForegroundMask,source).r):0.,target=uHasTarget>.5?smoothstep(.3,.7,texture2D(uInstanceMask,source).r):foreground;
- float visibility=1.;if(uHasSceneDepth>.5)visibility=mix(1.,spatialDepthVisibility(texture2D(uSceneDepth,source).rgb,elementZ,uDepthRange),foreground);
+ float visibility=1.;if(uHasSceneDepth>.5)visibility=mix(1.,spatialDepthVisibility(texture2D(uSceneDepth,source).rgb,elementZ,uDepthRange,.005),foreground);
  if(uOrdering>.5&&uOrdering<1.5)visibility=mix(visibility,1.,target);
  else if(uOrdering>1.5&&uOrdering<2.5)visibility=mix(visibility,0.,target);
  else if(uOrdering>2.5){float margin=max(.006,uManualDepth*.005),manual=1.-smoothstep(uManualDepth+margin,uManualDepth+2.*margin,elementZ);visibility=mix(visibility,manual,target);}
