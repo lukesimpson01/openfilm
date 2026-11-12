@@ -162,14 +162,13 @@ export function Tooltip({
               aria-hidden
               className="absolute block"
               style={{
-                left: fit?.arrow ?? '50%',
+                left: side === 'right' ? -ARROW_BOX / 2 - 0.5 : fit?.arrow ?? '50%',
                 width: ARROW_BOX,
                 height: ARROW_BOX,
                 background: 'var(--tooltip-bg)',
                 /* A square rotated 45 degrees, with only its two outward-facing edges stroked, overlaps the bubble's border to form one continuous arrow. */
                 ...(side === 'right'
                   ? {
-                    left: -ARROW_BOX / 2 - 0.5,
                     top: fit?.arrow ?? '50%',
                     transform: 'translateY(-50%) rotate(45deg)',
                     borderLeft: '1px solid var(--tooltip-border)',
