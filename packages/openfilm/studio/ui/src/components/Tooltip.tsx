@@ -41,7 +41,7 @@ export function Tooltip({
   /** Shortcut (the string already arranged for the platform, from shortcutHint). Shown as `Name (⌘Z)`. */
   shortcut?: string;
   /** Which side the tooltip appears on. Top-bar buttons use `bottom`; everything else defaults to above. */
-  side?: 'top' | 'bottom';
+  side?: 'top' | 'bottom' | 'right';
   /** The element the tooltip attaches to. Must accept a ref and mouse events. */
   children: React.ReactElement;
 }): React.ReactElement {
@@ -65,18 +65,20 @@ export function Tooltip({
     }
     const el = bubble.current;
     if (!el) return;
-    const w = el.offsetWidth;
-    const half = w / 2;
+    const horizontal = side === 'right';
+    const extent = horizontal ? el.offsetHeight : el.offsetWidth;
+    const half = extent / 2;
+    const limit = horizontal ? window.innerHeight : window.innerWidth;
     const min = EDGE_PAD + half;
-    const max = window.innerWidth - EDGE_PAD - half;
-    /* When the window is narrower than the bubble, min exceeds max and clamping gives an absurd position; center it then and let both sides overflow equally. */
-    const want = max < min ? window.innerWidth / 2 : Math.min(Math.max(at.x, min), max);
-    const shift = want - at.x;
+    const max = limit - EDGE_PAD - half;
+    const coordinate = horizontal ? at.y : at.x;
+    const want = max < min ? limit / 2 : Math.min(Math.max(coordinate, min), max);
+    const shift = want - coordinate;
     setFit({
       shift: Math.round(shift),
-      arrow: Math.round(Math.min(Math.max(half - shift, ARROW_INSET), w - ARROW_INSET)),
+      arrow: Math.round(Math.min(Math.max(half - shift, ARROW_INSET), extent - ARROW_INSET)),
     });
-  }, [at, label, shortcut]);
+  }, [at, label, shortcut, side]);
 
   const clear = React.useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -88,8 +90,8 @@ export function Tooltip({
     if (!el) return;
     const r = el.getBoundingClientRect();
     setAt({
-      x: Math.round(r.left + r.width / 2),
-      y: Math.round(side === 'bottom' ? r.bottom : r.top),
+      x: Math.round(side === 'right' ? r.right : r.left + r.width / 2),
+      y: Math.round(side === 'right' ? r.top + r.height / 2 : side === 'bottom' ? r.bottom : r.top),
     });
   }, [side]);
 
@@ -137,13 +139,13 @@ export function Tooltip({
           <div
             ref={bubble}
             role="tooltip"
-            className={`pointer-events-none fixed z-[10200] -translate-x-1/2 whitespace-nowrap rounded-[8px] px-2.5 py-[5px] text-[12px] font-medium shadow-md ${
-              side === 'bottom' ? '' : '-translate-y-full'
+            className={`pointer-events-none fixed z-[10200] ${side === 'right' ? '-translate-y-1/2' : '-translate-x-1/2'} whitespace-nowrap rounded-[8px] px-2.5 py-[5px] text-[12px] font-medium shadow-md ${
+              side === 'bottom' || side === 'right' ? '' : '-translate-y-full'
             }`}
             style={{
-              left: at.x + (fit?.shift ?? 0),
-              /* The arrow tip sits 2px from the button: the bubble should hug the button, not hang in mid-air. */
-              top: side === 'bottom' ? at.y + 2 + ARROW_H : at.y - 2 - ARROW_H,
+              left: side === 'right' ? at.x + 2 + ARROW_H : at.x + (fit?.shift ?? 0),
+              /* The arrow tip stays next to the selected control, even when shifted into view. */
+              top: side === 'right' ? at.y + (fit?.shift ?? 0) : side === 'bottom' ? at.y + 2 + ARROW_H : at.y - 2 - ARROW_H,
               /* The first frame has not measured the shift yet; do not paint, so it is not seen jumping from the wrong position. */
               visibility: fit ? 'visible' : 'hidden',
               background: 'var(--tooltip-bg)',
@@ -165,7 +167,15 @@ export function Tooltip({
                 height: ARROW_BOX,
                 background: 'var(--tooltip-bg)',
                 /* A square rotated 45 degrees, with only its two outward-facing edges stroked, overlaps the bubble's border to form one continuous arrow. */
-                ...(side === 'bottom'
+                ...(side === 'right'
+                  ? {
+                    left: -ARROW_BOX / 2 - 0.5,
+                    top: fit?.arrow ?? '50%',
+                    transform: 'translateY(-50%) rotate(45deg)',
+                    borderLeft: '1px solid var(--tooltip-border)',
+                    borderBottom: '1px solid var(--tooltip-border)',
+                  }
+                  : side === 'bottom'
                   ? {
                     top: -ARROW_BOX / 2 - 0.5,
                     transform: 'translateX(-50%) rotate(45deg)',
