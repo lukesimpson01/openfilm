@@ -580,11 +580,19 @@ export async function subtitleTranslator(root) {
    the words of the editor's subtitles too, so a clip captioned in either place says the same words. */
 const CLIPPER = process.env.CLYRA_CLIPPER_PIPELINE || fileURLToPath(new URL('../../../../../../../clipper-pipeline.py', import.meta.url));
 
-/** Timed words (seconds of the file) for `file`, or the part of it from `start` for `duration`, by the clipper. */
+/**
+ * Timed words (seconds of the file) for one clipper source.
+ * @param {string} file
+ * @param {{start?:number,duration?:number}} [range]
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<Array<{word:string,start:number,end:number}>>}
+ */
 export function clipperWords(file, { start = 0, duration = 0 } = {}, signal) {
   return new Promise((done, fail) => {
     const child = spawn('python3', [CLIPPER, '--transcribe', JSON.stringify({ source: file, start, duration })], { cwd: dirname(CLIPPER), stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '', err = '', words = null, error = '';
+    let out = '', err = '', error = '';
+    /** @type {Array<{word:string,start:number,end:number}> | null} */
+    let words = null;
     const stop = () => child.kill('SIGTERM');
     signal?.addEventListener('abort', stop, { once: true });
     child.stdout.on('data', (chunk) => {
@@ -605,14 +613,20 @@ export function clipperWords(file, { start = 0, duration = 0 } = {}, signal) {
   });
 }
 
-/** `src`'s words by the clipper, kept as its transcript (one cue a word: readTranscript makes them lines). */
+/**
+ * Speech transcript for a project source.
+ * @param {string} root
+ * @param {string} src
+ * @param {AbortSignal} [signal]
+ */
 export async function transcribeWithClipper(root, src, signal) {
   const words = await clipperWords(inside(root, src), {}, signal);
   await writeTranscript(root, src, { lines: words.map((w) => ({ text: w.word, startMs: Math.round(w.start * 1000), endMs: Math.round(w.end * 1000) })) });
 }
 
 export async function subtitleTranscriber() {
-  return async (root, src, signal) => {
+  /** @type {(root:string,src:string,signal?:AbortSignal)=>Promise<void>} */
+  const transcribe = async (root, src, signal) => {
     /* the clipper's speech-to-text first, where Clyra is beside this editor; a connected provider otherwise */
     if (existsSync(CLIPPER)) {
       try { await transcribeWithClipper(root, src, signal); return; }
@@ -623,6 +637,7 @@ export async function subtitleTranscriber() {
     }
     await runGet(root, 'asr', { src }, { yes: true, signal });
   };
+  return transcribe;
 }
 
 /* ── asking the person ───────────────────────────────────────────────────── */
