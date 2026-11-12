@@ -39,14 +39,17 @@ function zncc(a, b) {
  * @returns {{ anchor, improved:boolean, before:number, after:number, tiltDeg:number, scale:number, frames:number }}
  */
 export function refineSurfaceAnchor(anchor, solution, frames, click, refTimeUs, options = {}) {
+  // A cancelled or partially decoded scan must not interrupt placement.
+  if (!Array.isArray(frames) || !frames.length || !solution?.width || !solution?.height) return { anchor, improved: false, reason: 'no reference frame', frames: 0 };
   const ref = frames.reduce((a, b) => Math.abs(b.timeUs - refTimeUs) < Math.abs(a.timeUs - refTimeUs) ? b : a);
+  if (!ref?.gray || ref.gray.length !== ref.w * ref.h || ref.w < 20 || ref.h < 20) return { anchor, improved: false, reason: 'incomplete reference frame', frames: 0 };
   const refPose = spatialPoseAt(solution, ref.timeUs);  /* the pose of the very frame the patch is read from */
-  if (!refPose || !ref) return { anchor, improved: false, reason: 'no reference frame', frames: 0 };
+  if (!refPose) return { anchor, improved: false, reason: 'no camera pose', frames: 0 };
   const sx = ref.w / solution.width, sy = ref.h / solution.height, Kp = refPose.intrinsics;
   const K = [[Kp[0][0] * sx, 0, Kp[0][2] * sx], [0, Kp[1][1] * sy, Kp[1][2] * sy], [0, 0, 1]], Kinv = [[1 / K[0][0], 0, -K[0][2] / K[0][0]], [0, 1 / K[1][1], -K[1][2] / K[1][1]], [0, 0, 1]];
   const Rr = refPose.worldToCamera.map((r) => r.slice(0, 3)), tr = refPose.worldToCamera.map((r) => r[3]);
   const X0 = mulM(Rr, anchor.position).map((v, i) => v + tr[i]), n0 = unit(mulM(Rr, anchor.normal));
-  const cx = click[0] * sx, cy = click[1] * sy, edge = Math.floor(Math.min(cx, cy, ref.w - 1 - cx, ref.h - 1 - cy)) - 2, half = Math.min(options.half ?? Math.max(10, Math.round(.14 * Math.min(ref.w, ref.h))), edge), stride = options.stride ?? 2;
+  const cx = click[0] * sx, cy = click[1] * sy, edge = Math.floor(Math.min(cx, cy, ref.w - 1 - cx, ref.h - 1 - cy)) - 2, half = Math.min(options.half ?? Math.min(32, Math.max(10, Math.round(.14 * Math.min(ref.w, ref.h)))), edge), stride = options.stride ?? 3;
   if (half < 8) return { anchor, improved: false, reason: 'the click is too near the frame edge', frames: 0 };
   const grid = []; for (let v = -half; v <= half; v += stride) for (let u = -half; u <= half; u += stride) grid.push([cx + u, cy + v]);
   const refPatch = Float64Array.from(grid, ([x, y]) => sample(ref, x, y));
@@ -55,9 +58,9 @@ export function refineSurfaceAnchor(anchor, solution, frames, click, refTimeUs, 
   let m = 0; for (const v of refPatch) m += v; m /= refPatch.length; let varsum = 0; for (const v of refPatch) varsum += (v - m) ** 2; if (Math.sqrt(varsum / refPatch.length) < 6) return { anchor, improved: false, reason: 'plain surface: nothing to align against', frames: 0 };
 
   /* per-frame relative pose, computed once */
-  const maxFrames = options.maxFrames ?? 48, step = Math.max(1, Math.ceil(frames.length / maxFrames)), used = [];
+  const maxFrames = Math.max(8, options.maxFrames ?? 24), step = Math.max(1, Math.ceil(frames.length / maxFrames)), used = [];
   for (let i = 0; i < frames.length; i += step) {
-    const f = frames[i]; if (f === ref || Math.abs(f.timeUs - refTimeUs) < 1500) continue;
+    const f = frames[i]; if (f === ref || !f?.gray || f.gray.length !== f.w * f.h || Math.abs(f.timeUs - refTimeUs) < 1500) continue;
     const pose = spatialPoseAt(solution, f.timeUs); if (!pose || pose.shotId !== refPose.shotId) continue;
     const Rf = pose.worldToCamera.map((r) => r.slice(0, 3)), tf = pose.worldToCamera.map((r) => r[3]), Rrel = matMul(Rf, transpose(Rr)), Rt = mulM(Rrel, tr), trel = tf.map((v, k) => v - Rt[k]);
     used.push({ f, Rrel, trel });
@@ -85,7 +88,7 @@ export function refineSurfaceAnchor(anchor, solution, frames, click, refTimeUs, 
     return count ? sum / count : 9;
   };
 
-  const limit = (options.maxTiltDeg ?? 20) * Math.PI / 180, lsLimit = Math.log(options.maxScale ?? 1.25);
+  const limit = (options.maxTiltDeg ?? 28) * Math.PI / 180, lsLimit = Math.log(options.maxScale ?? 1.25);
   /* a wall patch leaves the frame as the camera walks on: judge it only over the frames where it is actually seen (decided at the unrefined plane, then held fixed) */
   const seen = used.filter((u) => { pool = [u]; const c = cost(0, 0, 0); return c < .6; }); pool = seen;
   pool = seen.filter((_, i) => i % 2 === 0);

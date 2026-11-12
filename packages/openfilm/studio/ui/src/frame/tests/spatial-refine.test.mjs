@@ -62,3 +62,12 @@ test('a fit that does not hold on frames it was not trained on is rejected', () 
   const { click, anchor } = startingPin(9), noisy = frames.map((f, j) => j % 2 ? { ...f, gray: f.gray.map((v, i) => (v + (i * 2654435761 >>> 24)) & 255) } : f);
   const r = refineSurfaceAnchor(anchor, solution, noisy, click, 0); if (r.improved) assert.ok(angle(r.anchor.normal, trueNormal) < angle(anchor.normal, trueNormal));
 });
+
+test('empty and partial scans fail safely without moving the anchor', () => {
+  const { click, anchor } = startingPin(9);
+  for (const unavailable of [[], [{ ...frames[0], gray: new Uint8Array(3) }]]) {
+    const result = refineSurfaceAnchor(anchor, solution, unavailable, click, 0);
+    assert.equal(result.improved, false);
+    assert.deepEqual(result.anchor.position, anchor.position);
+  }
+});
