@@ -28,13 +28,28 @@ def run(config):
     rotation = next((s['rotation'] for s in meta.get('side_data_list', []) if 'rotation' in s), 0)
     if round(rotation) % 180 == 90: w, h = h, w
     num, _, den = str(meta.get('avg_frame_rate', '30/1')).partition('/')
-    fps = max(1.0, min(60.0, float(num) / float(den or 1))) if float(num or 0) > 0 else 30.0
+    try:
+        source_fps = float(num) / float(den) if float(den) > 0 else 30.0
+    except (ValueError, ZeroDivisionError):
+        source_fps = 30.0
+    source_fps = max(1.0, min(60.0, source_fps))
     start, end = float(config['from']), float(config['to'])
-    progress('Finding faces', .1)
+    duration = max(.01, end - start)
+    budget = max(0, int(config.get('memoryBudgetBytes') or 0))
+    # Keep the clipper's validated LK optical flow and time-indexed interpolation.
+    # Do not run 480p 30–60 fps face inference unless high_quality is requested.
+    requested = str(config.get('trackingQuality') or '').strip().lower()
+    quality = tracker.normalise_tracking_quality(requested) if requested else (
+        'low_memory' if duration >= 120 or (budget and budget < 1200 * 1024 ** 2)
+        else 'balanced'
+    )
+    fps = tracker.analysis_fps_for_quality(quality, source_fps)
+    proxy_height = 288 if quality == 'low_memory' else 480 if quality in ('high_quality', 'gpu') else 360
+    progress('Finding faces', .1, quality=quality, fps=fps)
     cache = tempfile.mkdtemp(prefix='clyra-faces-', dir=str(out))
     try:
-        a = tracker._analyse_proxy_stream(shutil.which('ffmpeg') or 'ffmpeg', config['source'], start, end - start, cache,
-                                          height=480, fps=fps, thumb_dir=None, source_fps=fps, tracking_quality='quality')
+        a = tracker._analyse_proxy_stream(shutil.which('ffmpeg') or 'ffmpeg', config['source'], start, duration, cache,
+                                          height=proxy_height, fps=fps, thumb_dir=None, source_fps=source_fps, tracking_quality=quality)
     finally:
         shutil.rmtree(cache, ignore_errors=True)
     frames = []
@@ -45,7 +60,7 @@ def run(config):
             faces.append({'id': x['trackId'], 'box': [b[0] * w, b[1] * h, b[2] * w, b[3] * h], 'confidence': round(float(x.get('confidence') or 0), 3),
                           'source': 'flow' if f.get('source') == 'optical-flow' else 'detected'})
         frames.append({'t': round(start + f['timeMs'] / 1000.0, 4), 'faces': faces})
-    result = {'version': 1, 'w': w, 'h': h, 'fps': fps, 'backend': a['backend'], 'frames': frames,
+    result = {'version': 1, 'w': w, 'h': h, 'fps': fps, 'sourceFps': source_fps, 'trackingQuality': quality, 'proxyHeight': proxy_height, 'backend': a['backend'], 'frames': frames,
               'elapsedMs': round((time.monotonic() - started) * 1000), 'peakRssBytes': peak_rss()}
     (out / 'faces.json').write_text(json.dumps(result))
     progress('Faces found', 1)

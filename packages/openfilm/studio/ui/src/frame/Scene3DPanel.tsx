@@ -22,7 +22,6 @@ import { sceneItem, visibleSurfaceMarkers, referenceInScene, pointInside } from 
 import{SpatialPlacementPreview}from'./SpatialPlacementPreview';
 import{anchorFrame,spatialPoseAt,projectWorld,worldAnchor,surfaceAnchor,cameraRay}from'./spatial-geometry.js';
 import { spatialItem } from './spatial-items.js';
-import { refineSurfaceAnchor } from './spatial-refine.js';
 import { refineTrackNative } from './spatial-analysis';
 import { projectedTrackPoints, nearestTriangle, anchorFromPoints, targetQuad, targetRing } from './track-points.js';
 import { useSceneTracks } from './useSceneTracks';
@@ -186,17 +185,30 @@ export function Scene3DPanel({ projectId, folder, film, timeMs, edit, notify, se
   /* A surface pin starts from the plane the reconstruction fitted. Once the scan's frames are in, the footage itself checks that plane: it is tilted and moved only if the wall then lines up across the clip, on frames it was not fitted to. */
   const [aligned,setAligned]=React.useState<'working'|'done'|'kept'|null>(null);
   React.useEffect(()=>{
-    const a=pick?.spatialAnchor;if(!pick||!a||a.type!=='surface'||a.refineTried||a.manual||!scan||!result?.spatial||!sceneTracks[result.spatial]){setAligned(null);return;}
+    const a=pick?.spatialAnchor;
+    if(!pick||!a||a.type!=='surface'||a.refineTried||a.manual||!scan||!result?.spatial||!sceneTracks[result.spatial]){setAligned(null);return;}
     const target=pick,sol=sceneTracks[result.spatial];setAligned('working');
+    let live=true,worker:Worker|null=null;
+    const finish=(anchor:any,improved:boolean)=>{
+      if(!live)return;
+      setPick(q=>q===target?{...target,spatialAnchor:{...(improved&&anchor?anchor:a),refineTried:true}}:q);
+      setAligned(improved?'done':'kept');
+      worker?.terminate();worker=null;
+    };
     const timer=window.setTimeout(()=>{
-      let next=target;let outcome:'done'|'kept'='kept';
       try{
-        const t=Math.round((target.time??sceneTime)*1e6),frames=scan.times.map((tt,i)=>({timeUs:Math.round(tt*1e6),gray:scan.grays[i],w:scan.w,h:scan.h})),r=refineSurfaceAnchor(a,sol,frames,[(target.currentX??.5)*sol.width,(target.currentY??.5)*sol.height],t);
-        if(r.improved){next={...target,spatialAnchor:{...r.anchor,refineTried:true}};outcome='done';}else next={...target,spatialAnchor:{...a,refineTried:true}};
-      }catch{next={...target,spatialAnchor:{...a,refineTried:true}};}
-      setPick(q=>q===target?next:q);setAligned(outcome);
+        // Analyse no more than 20 proxy frames, without reducing export resolution.
+        const cap=20,stride=Math.max(1,Math.ceil(scan.times.length/cap)),t=Math.round((target.time??sceneTime)*1e6);
+        const closest=scan.times.reduce((best,tt,i)=>Math.abs(tt*1e6-t)<Math.abs(scan.times[best]*1e6-t)?i:best,0);
+        const ids=scan.times.map((_,i)=>i).filter(i=>i%stride===0||i===closest);
+        const frames=ids.map(i=>({timeUs:Math.round(scan.times[i]*1e6),gray:scan.grays[i],w:scan.w,h:scan.h}));
+        worker=new Worker(new URL('./spatial-refine-worker.js',import.meta.url),{type:'module'});
+        worker.onmessage=(event:MessageEvent)=>finish(event.data?.anchor,event.data?.improved===true);
+        worker.onerror=()=>finish(null,false);
+        worker.postMessage({anchor:a,solution:sol,frames,click:[(target.currentX??.5)*sol.width,(target.currentY??.5)*sol.height],refTimeUs:t});
+      }catch{finish(null,false);}
     },30);
-    return()=>window.clearTimeout(timer);
+    return()=>{live=false;window.clearTimeout(timer);worker?.terminate();};
   },[pick,scan,result?.spatial,sceneTracks]); // eslint-disable-line react-hooks/exhaustive-deps
   const subjectAtRef=React.useRef<(u:number,v:number)=>boolean>(()=>false);
   /* the foreground outline arrives after the scan: once it has, the spots are chosen again with the people left out */
